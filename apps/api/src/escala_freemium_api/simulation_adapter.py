@@ -53,6 +53,8 @@ def run_simulation(req: SimulateRequest) -> SimulateResponse:
     else:
         headline = "Sua rede pode operar 5x2 sem aumento de folha (cenário raro)."
 
+    # (helper definido abaixo)
+
     # Economia potencial WFM = 5% da folha proposta × N lojas
     economia_wfm = (output.folha_proposta_mes * WFM_ECONOMY_PCT * n_lojas).quantize(
         Decimal("0.01")
@@ -142,3 +144,19 @@ def _setor_to_brand(setor: SetorType) -> str:
     # No futuro, o engine vai ter brand="generic_retail" e "food_service".
     # Por ora, todos caem em "tfc" (regras mais permissivas que T&F).
     return "tfc"
+
+
+def _format_headline_gasto(delta_mes_rede: Decimal, n_lojas: int) -> str:
+    """Formata o headline mostrando o gasto extra mensal da rede."""
+    valor_brl = (
+        f"R$ {float(delta_mes_rede):,.2f}"
+        .replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
+    if n_lojas == 1:
+        return f"Sua loja vai gastar {valor_brl} a mais por mês com a escala 5x2."
+    return (
+        f"Sua rede de {n_lojas} lojas vai gastar {valor_brl} a mais por mês "
+        f"com a escala 5x2."
+    )
