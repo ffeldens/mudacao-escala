@@ -1,0 +1,24 @@
+{
+  "name": "mudacao-escala-freemium",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Simulador freemium PEC 8/2025 — MudAção Escala",
+  "author": "Felipe Feldens <felipe@feldens.com>",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:web": "pnpm --filter @mudacao/escala-web dev",
+    "dev:api": "cd apps/api && uv run uvicorn escala_freemium_api.main:app --reload --port 8012",
+    "build:web": "pnpm --filter @mudacao/escala-web build",
+    "lint": "pnpm --filter @mudacao/escala-web lint",
+    "test:engine": "cd packages/engine && uv run pytest",
+    "test:api": "cd apps/api && uv run pytest"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "escala-engine"
+version = "0.1.0"
+description = "Motor de cálculo do escala-toolkit — simulação 6x1 → 5x2 e validação CLT"
+authors = [
+    { name = "Felipe Feldens", email = "felipe@feldens.com" }
+]
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+keywords = ["clt", "escala", "varejo", "5x2", "6x1", "wfm"]
+
+dependencies = [
+    "pydantic>=2.6,<3",
+    "pyyaml>=6.0",
+    "click>=8.1",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "pytest-watch>=4.2",
+    "ruff>=0.3",
+    "mypy>=1.8",
+    "types-PyYAML",
+]
+
+[project.scripts]
+engine = "engine.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/engine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --cov=engine --cov-report=term-missing --cov-report=html"
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true

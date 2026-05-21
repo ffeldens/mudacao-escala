@@ -1,0 +1,233 @@
+"""Rotas da API."""
+
+from __future__ import annotations
+
+import logging
+from typing import Annotated
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from escala_freemium_api import __version__
+from escala_freemium_api.config import get_settings
+from escala_freemium_api.db import Lead, Simulation, get_db
+from escala_freemium_api.email_sender import send_lead_welcome_email
+from escala_freemium_api.pdf import render_simulation_pdf
+from escala_freemium_api.schemas import (
+    HealthResponse,
+    LeadRequest,
+    LeadResponse,
+    SimulateRequest,
+    SimulateResponse,
+    VersionResponse,
+)
+from escala_freemium_api.simulation_adapter import run_simulation
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api")
+
+DbSession = Annotated[Session, Depends(get_db)]
+
+
+# =============================================================================
+# Health / version
+# =============================================================================
+
+
+@router.get("/health", response_model=HealthResponse, tags=["meta"])
+async def health() -> HealthResponse:
+    return HealthResponse()
+
+
+@router.get("/version", response_model=VersionResponse, tags=["meta"])
+async def version() -> VersionResponse:
+    try:
+        from engine import __version__ as engine_version  # noqa: PLC0415
+    except ImportError:
+        engine_version = "unknown"
+
+    return VersionResponse(
+        api_version=__version__,
+        engine_version=engine_version,
+        env=get_settings().APP_ENV,
+    )
+
+
+# =============================================================================
+# Simulação
+# =============================================================================
+
+
+@router.post("/simulate", response_model=SimulateResponse, tags=["simulator"])
+async def simulate(req: SimulateRequest, db: DbSession) -> SimulateResponse:
+    """Roda a simulação e persiste o resultado (sem lead — anônimo)."""
+    try:
+        result = run_simulation(req)
+    except Exception as e:
+        logger.exception("Falha na simulação")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # Persiste pra ter base analítica mesmo sem lead
+    sim = Simulation(
+        inputs_hash=result.inputs_hash,
+        inputs=req.model_dump(mode="json"),
+        outputs=result.model_dump(mode="json"),
+        n_lojas_extrapolacao=req.n_lojas_rede,
+        delta_folha_pct=result.delta_folha_pct,
+        economia_estimada_mes=result.economia_potencial_wfm,
+    )
+    db.add(sim)
+    db.commit()
+
+    return result
+
+
+# =============================================================================
+# Lead capture
+# =============================================================================
+
+
+@router.post("/lead", response_model=LeadResponse, tags=["leads"])
+async def capture_lead(
+    req: LeadRequest,
+    background_tasks: BackgroundTasks,
+    db: DbSession,
+) -> LeadResponse:
+    """Captura email/WhatsApp e dispara email de boas-vindas em background."""
+    lead = Lead(
+        email=req.email,
+        whatsapp=req.whatsapp,
+        nome=req.nome,
+        empresa=req.empresa,
+        n_lojas=req.n_lojas,
+        porte=req.porte,
+        setor=req.setor,
+        source="simulator_gate",
+        utm_source=req.utm_source,
+        utm_medium=req.utm_medium,
+        utm_campaign=req.utm_campaign,
+    )
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+
+    # Dispara email em background (não bloqueia resposta)
+    background_tasks.add_task(
+        _send_welcome_email_safe,
+        to=req.email,
+        nome=req.nome,
+        n_lojas=req.n_lojas,
+    )
+
+    return LeadResponse(
+        lead_id=str(lead.id),
+        email=lead.email,
+        email_enviado=True,  # otimista — fire and forget
+    )
+
+
+# =============================================================================
+# Lead + simulação combinados (atalho do frontend)
+# =============================================================================
+
+
+@router.post("/lead-and-simulate", response_model=SimulateResponse, tags=["simulator"])
+async def lead_and_simulate(
+    lead_req: LeadRequest,
+    sim_req: SimulateRequest,
+    background_tasks: BackgroundTasks,
+    db: DbSession,
+) -> SimulateResponse:
+    """Captura lead + roda simulação em uma chamada (fluxo principal do frontend)."""
+    # 1. Roda simulação
+    try:
+        result = run_simulation(sim_req)
+    except Exception as e:
+        logger.exception("Falha na simulação")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # 2. Persiste lead
+    lead = Lead(
+        email=lead_req.email,
+        whatsapp=lead_req.whatsapp,
+        nome=lead_req.nome,
+        empresa=lead_req.empresa,
+        n_lojas=lead_req.n_lojas,
+        porte=lead_req.porte,
+        setor=lead_req.setor,
+        source="simulator_gate",
+        utm_source=lead_req.utm_source,
+        utm_medium=lead_req.utm_medium,
+        utm_campaign=lead_req.utm_campaign,
+    )
+    db.add(lead)
+    db.flush()  # gera lead.id sem commitar ainda
+
+    # 3. Persiste simulação ligada ao lead
+    sim = Simulation(
+        lead_id=lead.id,
+        inputs_hash=result.inputs_hash,
+        inputs=sim_req.model_dump(mode="json"),
+        outputs=result.model_dump(mode="json"),
+        n_lojas_extrapolacao=sim_req.n_lojas_rede,
+        delta_folha_pct=result.delta_folha_pct,
+        economia_estimada_mes=result.economia_potencial_wfm,
+    )
+    db.add(sim)
+    db.commit()
+
+    # 4. Email em background (com PDF se possível)
+    background_tasks.add_task(
+        _send_welcome_email_with_pdf_safe,
+        to=lead_req.email,
+        nome=lead_req.nome,
+        n_lojas=lead_req.n_lojas,
+        result=result,
+    )
+
+    return result
+
+
+# =============================================================================
+# Helpers privados (background tasks)
+# =============================================================================
+
+
+async def _send_welcome_email_safe(*, to: str, nome: str | None, n_lojas: int) -> None:
+    try:
+        await send_lead_welcome_email(
+            to=to,
+            nome=nome,
+            headline="Sua simulação foi processada — abra o link abaixo.",
+            economia_potencial="—",
+            n_lojas=n_lojas,
+        )
+    except Exception:
+        logger.exception("Falha no background email pra %s", to)
+
+
+async def _send_welcome_email_with_pdf_safe(
+    *,
+    to: str,
+    nome: str | None,
+    n_lojas: int,
+    result: SimulateResponse,
+) -> None:
+    try:
+        pdf_bytes = render_simulation_pdf(result)
+        from decimal import Decimal  # noqa: PLC0415
+
+        def brl(v: Decimal) -> str:
+            return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        await send_lead_welcome_email(
+            to=to,
+            nome=nome,
+            headline=result.headline,
+            economia_potencial=brl(result.economia_potencial_wfm),
+            n_lojas=n_lojas,
+            pdf_bytes=pdf_bytes,
+        )
+    except Exception:
+        logger.exception("Falha no background email c/ PDF pra %s", to)

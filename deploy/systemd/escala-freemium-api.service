@@ -1,0 +1,24 @@
+[Unit]
+Description=MudAcao Escala Freemium API (FastAPI/Uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/escala-freemium/apps/api
+EnvironmentFile=/opt/escala-freemium/.env
+Environment="PATH=/home/deploy/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/home/deploy/.local/bin/uv run uvicorn escala_freemium_api.main:app --host 127.0.0.1 --port 8012
+Restart=on-failure
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/escala-freemium /var/log/escala-freemium
+
+[Install]
+WantedBy=multi-user.target

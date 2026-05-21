@@ -1,0 +1,37 @@
+# =============================================================================
+# Caddy snippet pra MudAção Escala Freemium
+# =============================================================================
+# Adicionar ao /etc/caddy/Caddyfile na VPS, na seção dos sites.
+# Reload: sudo systemctl reload caddy
+#
+# Pré-req: DNS simulaescala.mudacao.com.br → 31.97.163.175
+
+simulaescala.mudacao.com.br {
+    encode gzip zstd
+
+    # Proxy pro Next.js (que internamente já bate na FastAPI via /api)
+    reverse_proxy 127.0.0.1:8011 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Headers de segurança
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        -Server
+    }
+
+    # Logs
+    log {
+        output file /var/log/caddy/simulaescala.access.log {
+            roll_size 50mb
+            roll_keep 7
+        }
+        format json
+    }
+}
