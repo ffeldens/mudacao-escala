@@ -14,16 +14,15 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     JSON,
-    Column,
     DateTime,
     ForeignKey,
     Integer,
     Numeric,
     String,
+    Uuid,
     create_engine,
     event,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from escala_freemium_api.config import get_settings
@@ -67,20 +66,18 @@ class Base(DeclarativeBase):
     """Base declarativa SQLAlchemy 2.0."""
 
 
-def _new_uuid_str() -> str:
-    """Default pra coluna id em SQLite — UUID como string."""
-    return str(uuid4())
-
-
 class Lead(Base):
     """Lead capturado no simulador free."""
 
     __tablename__ = "leads"
 
+    # Uuid nativo do SQLAlchemy 2.0:
+    # - Postgres: usa tipo UUID nativo
+    # - SQLite/MySQL: armazena como CHAR(32) hex, aceita/retorna objetos UUID
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True) if _is_postgres else String(36),
+        Uuid(as_uuid=True),
         primary_key=True,
-        default=uuid4 if _is_postgres else _new_uuid_str,
+        default=uuid4,
     )
     email: Mapped[str] = mapped_column(String(255), index=True)
     whatsapp: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -102,12 +99,12 @@ class Simulation(Base):
     __tablename__ = "simulations"
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True) if _is_postgres else String(36),
+        Uuid(as_uuid=True),
         primary_key=True,
-        default=uuid4 if _is_postgres else _new_uuid_str,
+        default=uuid4,
     )
     lead_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True) if _is_postgres else String(36),
+        Uuid(as_uuid=True),
         ForeignKey("leads.id"),
         nullable=True,
         index=True,
