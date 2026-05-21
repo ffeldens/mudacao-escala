@@ -67,6 +67,11 @@ class Base(DeclarativeBase):
     """Base declarativa SQLAlchemy 2.0."""
 
 
+def _new_uuid_str() -> str:
+    """Default pra coluna id em SQLite — UUID como string."""
+    return str(uuid4())
+
+
 class Lead(Base):
     """Lead capturado no simulador free."""
 
@@ -75,7 +80,7 @@ class Lead(Base):
     id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True) if _is_postgres else String(36),
         primary_key=True,
-        default=uuid4,
+        default=uuid4 if _is_postgres else _new_uuid_str,
     )
     email: Mapped[str] = mapped_column(String(255), index=True)
     whatsapp: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -99,7 +104,7 @@ class Simulation(Base):
     id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True) if _is_postgres else String(36),
         primary_key=True,
-        default=uuid4,
+        default=uuid4 if _is_postgres else _new_uuid_str,
     )
     lead_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True) if _is_postgres else String(36),
