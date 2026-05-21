@@ -29,7 +29,7 @@ Guia de deploy na VPS Hostinger (mesma do T&F Escala, processos isolados).
 sudo -u deploy -i
 sudo mkdir -p /opt/escala-freemium && sudo chown deploy:deploy /opt/escala-freemium
 cd /opt/escala-freemium
-git clone git@github.com:SEU-USUARIO/mudacao-escala.git .
+git clone git@github.com:ffeldens/mudacao-escala.git .
 
 # 3. .env
 cp .env.example .env
