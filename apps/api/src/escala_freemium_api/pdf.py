@@ -271,6 +271,9 @@ def _cenarios(r: SimulateResponse) -> str:
             f"<td style='text-align:right'>{_brl(c.folha_total)}</td>"
             f"<td style='text-align:right'>{_signal(c.delta_folha_pct)}</td></tr>"
         )
+
+    chart_svg = _cenarios_chart_svg(r)
+
     return f"""\
 <h2>Comparação dos 3 cenários</h2>
 <p>
@@ -279,6 +282,9 @@ def _cenarios(r: SimulateResponse) -> str:
   (8-14% de impacto). Pessimista assume zero ganho; otimista assume WFM
   bem implementado recuperando produtividade.
 </p>
+
+{chart_svg}
+
 <table class="data">
   <tr><th>Cenário</th><th style="text-align:right">FTE</th>
       <th style="text-align:right">Folha/mês</th>
@@ -286,6 +292,107 @@ def _cenarios(r: SimulateResponse) -> str:
   {"".join(rows)}
 </table>
 """
+
+
+def _cenarios_chart_svg(r: SimulateResponse) -> str:
+    """Gera um bar chart SVG inline dos 3 cenários + linha da folha atual.
+
+    SVG é renderizado nativamente pelo WeasyPrint, mantém-se vetorial no PDF
+    (sem precisar de matplotlib ou Pillow).
+    """
+    folha_atual = float(r.folha_atual_mes)
+    cenarios = [
+        ("Pessimista", float(r.cenarios["pessimista"].folha_total),
+         float(r.cenarios["pessimista"].delta_folha_pct), "#dc2626"),
+        ("Neutro", float(r.cenarios["neutro"].folha_total),
+         float(r.cenarios["neutro"].delta_folha_pct), "#0a4a3a"),
+        ("Otimista", float(r.cenarios["otimista"].folha_total),
+         float(r.cenarios["otimista"].delta_folha_pct), "#5ea27f"),
+    ]
+
+    # Dimensões do SVG (em px lógicos)
+    width = 520
+    height = 220
+    margin_top = 28
+    margin_bottom = 40
+    margin_left = 70
+    margin_right = 20
+    plot_w = width - margin_left - margin_right
+    plot_h = height - margin_top - margin_bottom
+
+    # Domínio
+    max_val = max(*(c[1] for c in cenarios), folha_atual) * 1.15
+
+    # Geometria das barras
+    bar_w = 80
+    gap = (plot_w - bar_w * 3) / 4
+
+    bars_svg = []
+    for i, (nome, folha, delta_pct, color) in enumerate(cenarios):
+        x = margin_left + gap + i * (bar_w + gap)
+        bar_h = (folha / max_val) * plot_h
+        y = margin_top + (plot_h - bar_h)
+
+        # Label do delta % no topo da barra
+        delta_txt = f"+{delta_pct:.1f}%" if delta_pct >= 0 else f"{delta_pct:.1f}%"
+        delta_color = "#dc2626" if delta_pct > 0 else "#15803d" if delta_pct < 0 else "#64748b"
+
+        bars_svg.append(
+            f'<rect x="{x}" y="{y}" width="{bar_w}" height="{bar_h}" '
+            f'fill="{color}" rx="6" />'
+            # Delta % acima da barra
+            f'<text x="{x + bar_w / 2}" y="{y - 8}" text-anchor="middle" '
+            f'font-size="11" font-weight="700" fill="{delta_color}">{delta_txt}</text>'
+            # Nome do cenário abaixo
+            f'<text x="{x + bar_w / 2}" y="{margin_top + plot_h + 16}" '
+            f'text-anchor="middle" font-size="11" font-weight="600" '
+            f'fill="#475569">{nome}</text>'
+            # Valor abaixo do nome
+            f'<text x="{x + bar_w / 2}" y="{margin_top + plot_h + 30}" '
+            f'text-anchor="middle" font-size="9" fill="#94a3b8">{_brl_short(folha)}</text>'
+        )
+
+    # Linha de referência da folha atual
+    ref_y = margin_top + (plot_h - (folha_atual / max_val) * plot_h)
+    ref_line = (
+        f'<line x1="{margin_left}" y1="{ref_y}" x2="{width - margin_right}" '
+        f'y2="{ref_y}" stroke="#64748b" stroke-width="1" stroke-dasharray="4 3" />'
+        f'<text x="{width - margin_right - 4}" y="{ref_y - 4}" text-anchor="end" '
+        f'font-size="9" fill="#64748b" font-style="italic">'
+        f'Folha atual: {_brl_short(folha_atual)}</text>'
+    )
+
+    # Eixo Y (3 ticks: 0, max/2, max)
+    y_ticks_svg = []
+    for tick_val in (0, max_val / 2, max_val):
+        ty = margin_top + (plot_h - (tick_val / max_val) * plot_h)
+        y_ticks_svg.append(
+            f'<text x="{margin_left - 8}" y="{ty + 3}" text-anchor="end" '
+            f'font-size="9" fill="#94a3b8">{_brl_short(tick_val)}</text>'
+            f'<line x1="{margin_left}" y1="{ty}" x2="{width - margin_right}" '
+            f'y2="{ty}" stroke="#e2e8f0" stroke-width="0.5" />'
+        )
+
+    return f"""\
+<div style="margin: 12pt 0 8pt;">
+<svg width="100%" viewBox="0 0 {width} {height}"
+     xmlns="http://www.w3.org/2000/svg"
+     style="background:#f8fafc;border-radius:6pt;font-family:sans-serif;">
+  {"".join(y_ticks_svg)}
+  {ref_line}
+  {"".join(bars_svg)}
+</svg>
+</div>
+"""
+
+
+def _brl_short(v: float) -> str:
+    """Formata BRL compacto: 267638 → 'R$ 268 mil', 3211656 → 'R$ 3,2 mi'."""
+    if v >= 1_000_000:
+        return f"R$ {v / 1_000_000:.1f} mi".replace(".", ",")
+    if v >= 1_000:
+        return f"R$ {v / 1_000:.0f} mil"
+    return f"R$ {v:.0f}"
 
 
 def _fte_section(r: SimulateResponse) -> str:
