@@ -20,6 +20,123 @@ logger = logging.getLogger(__name__)
 RESEND_API_URL = "https://api.resend.com/emails"
 
 
+async def send_admin_notification(
+    *,
+    lead_email: str,
+    lead_nome: str | None,
+    lead_whatsapp: str | None,
+    lead_empresa: str | None,
+    result: SimulateResponse,
+) -> bool:
+    """Notifica o admin (Felipe) sempre que um novo lead é capturado.
+
+    Email curto, formato admin, com os dados do lead + resumo da simulação.
+    """
+    settings = get_settings()
+
+    if not settings.RESEND_API_KEY or not settings.ADMIN_NOTIFY_EMAIL:
+        return False
+
+    nome = lead_nome or "(sem nome)"
+    empresa = lead_empresa or "(sem empresa)"
+    whatsapp = lead_whatsapp or "(sem WhatsApp)"
+
+    html = f"""\
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Novo lead</title></head>
+<body style="font-family:-apple-system,'Segoe UI',sans-serif;color:#1a1a1a;
+             line-height:1.5;max-width:600px;margin:0 auto;padding:24px;">
+  <div style="background:#0a4a3a;color:#fff;padding:16px 20px;border-radius:8px;">
+    <p style="margin:0;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;
+              color:#b8dcc8;font-weight:600;">
+      🎯 MudAção Escala
+    </p>
+    <h1 style="margin:6px 0 0;font-size:22px;">Novo lead capturado</h1>
+  </div>
+
+  <h2 style="color:#0a4a3a;font-size:16px;margin:24px 0 8px;">Contato</h2>
+  <table style="width:100%;border-collapse:collapse;">
+    <tr><td style="padding:6px 0;color:#64748b;width:120px;">Nome</td>
+        <td style="padding:6px 0;font-weight:600;">{nome}</td></tr>
+    <tr><td style="padding:6px 0;color:#64748b;">Email</td>
+        <td style="padding:6px 0;font-weight:600;"><a href="mailto:{lead_email}"
+            style="color:#0a4a3a;">{lead_email}</a></td></tr>
+    <tr><td style="padding:6px 0;color:#64748b;">WhatsApp</td>
+        <td style="padding:6px 0;font-weight:600;"><a href="https://wa.me/{_only_digits(whatsapp)}"
+            style="color:#0a4a3a;">{whatsapp}</a></td></tr>
+    <tr><td style="padding:6px 0;color:#64748b;">Empresa</td>
+        <td style="padding:6px 0;">{empresa}</td></tr>
+  </table>
+
+  <h2 style="color:#0a4a3a;font-size:16px;margin:24px 0 8px;">Simulação</h2>
+  <table style="width:100%;border-collapse:collapse;">
+    <tr><td style="padding:6px 0;color:#64748b;width:200px;">Rede</td>
+        <td style="padding:6px 0;font-weight:600;">{result.n_lojas} loja(s)</td></tr>
+    <tr><td style="padding:6px 0;color:#64748b;">Aumento de folha (rede/mês)</td>
+        <td style="padding:6px 0;font-weight:600;color:#dc2626;">
+          {_brl(result.delta_folha_rede_mes)}</td></tr>
+    <tr><td style="padding:6px 0;color:#64748b;">Aumento em 1 ano</td>
+        <td style="padding:6px 0;font-weight:600;color:#dc2626;">
+          {_brl(result.delta_folha_rede_ano)}</td></tr>
+    <tr><td style="padding:6px 0;color:#64748b;">% acima da folha atual</td>
+        <td style="padding:6px 0;font-weight:600;">
+          +{_pct(result.delta_folha_pct)}</td></tr>
+    <tr><td style="padding:6px 0;color:#64748b;">FTEs extras/loja</td>
+        <td style="padding:6px 0;font-weight:600;">
+          +{result.fte_extras_necessarios}</td></tr>
+    <tr><td style="padding:6px 0;color:#64748b;">Economia potencial WFM</td>
+        <td style="padding:6px 0;font-weight:600;color:#15803d;">
+          {_brl(result.economia_potencial_wfm)}/mês</td></tr>
+  </table>
+
+  <p style="margin:24px 0 0;padding:12px;background:#f5f7f6;border-radius:6px;
+            font-size:12px;color:#64748b;">
+    Hash de inputs: <code>{result.inputs_hash}</code><br>
+    Lead recebeu email automático com o relatório. Você pode responder
+    diretamente clicando no email do lead acima.
+  </p>
+</body>
+</html>
+"""
+
+    payload = {
+        "from": f"MudAção Escala <{settings.RESEND_FROM_EMAIL}>",
+        "to": [settings.ADMIN_NOTIFY_EMAIL],
+        "reply_to": lead_email,  # responder direto pro lead
+        "subject": f"🎯 Lead: {nome} ({result.n_lojas} lojas, {_brl(result.delta_folha_rede_mes)}/mês)",
+        "html": html,
+        "tags": [
+            {"name": "category", "value": "admin_notification"},
+            {"name": "env", "value": settings.APP_ENV},
+        ],
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                RESEND_API_URL,
+                headers={
+                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            if r.status_code >= 400:
+                logger.error("Resend admin notify retornou %s: %s", r.status_code, r.text)
+                return False
+            logger.info("Admin notification enviado pra %s", settings.ADMIN_NOTIFY_EMAIL)
+            return True
+    except httpx.HTTPError as e:
+        logger.exception("Falha admin notification: %s", e)
+        return False
+
+
+def _only_digits(s: str) -> str:
+    """Remove tudo que não é dígito (pra usar em wa.me/X)."""
+    return "".join(c for c in s if c.isdigit())
+
+
 async def send_lead_welcome_email(
     *,
     to: str,

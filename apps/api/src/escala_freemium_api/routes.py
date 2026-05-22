@@ -11,7 +11,10 @@ from sqlalchemy.orm import Session
 from escala_freemium_api import __version__
 from escala_freemium_api.config import get_settings
 from escala_freemium_api.db import Lead, Simulation, get_db
-from escala_freemium_api.email_sender import send_lead_welcome_email
+from escala_freemium_api.email_sender import (
+    send_admin_notification,
+    send_lead_welcome_email,
+)
 from escala_freemium_api.pdf import render_simulation_pdf
 from escala_freemium_api.schemas import (
     HealthResponse,
@@ -180,6 +183,16 @@ async def lead_and_simulate(
         result=result,
     )
 
+    # 5. Notificação admin (Felipe é avisado de cada novo lead)
+    background_tasks.add_task(
+        _send_admin_notification_safe,
+        lead_email=lead_req.email,
+        lead_nome=lead_req.nome,
+        lead_whatsapp=lead_req.whatsapp,
+        lead_empresa=lead_req.empresa,
+        result=result,
+    )
+
     return result
 
 
@@ -205,3 +218,24 @@ async def _send_welcome_email_with_pdf_safe(
         )
     except Exception:
         logger.exception("Falha no background email c/ PDF pra %s", to)
+
+
+async def _send_admin_notification_safe(
+    *,
+    lead_email: str,
+    lead_nome: str | None,
+    lead_whatsapp: str | None,
+    lead_empresa: str | None,
+    result: SimulateResponse,
+) -> None:
+    """Envia notificação admin. Loga erro mas nunca propaga."""
+    try:
+        await send_admin_notification(
+            lead_email=lead_email,
+            lead_nome=lead_nome,
+            lead_whatsapp=lead_whatsapp,
+            lead_empresa=lead_empresa,
+            result=result,
+        )
+    except Exception:
+        logger.exception("Falha admin notify pra lead %s", lead_email)

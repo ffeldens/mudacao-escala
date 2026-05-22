@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     RESEND_FROM_EMAIL: str = "simulador@mudacao.com.br"
     RESEND_REPLY_TO: str = "felipe@feldens.com"
 
+    # Email admin recebe notificação a cada novo lead.
+    # Deixe vazio pra desativar.
+    ADMIN_NOTIFY_EMAIL: str = "felipe@feldens.com"
+
     # Supabase (frontend usa anon; backend só usa service role pra writes especiais)
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
