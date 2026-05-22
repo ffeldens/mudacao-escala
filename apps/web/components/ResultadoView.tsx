@@ -2,10 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Mail, ArrowLeft } from "lucide-react";
+import {
+  ArrowRight,
+  Mail,
+  ArrowLeft,
+  Sparkles,
+  Lightbulb,
+  Share2,
+  Download,
+} from "lucide-react";
 
 import type { SimulateResponse } from "@/lib/api";
 import { brl } from "@/lib/utils";
+import { ScenarioChart } from "@/components/charts/ScenarioChart";
+import { NetworkImpactCard } from "@/components/charts/NetworkImpactCard";
+import { FteBreakdown } from "@/components/charts/FteBreakdown";
 
 type StoredResult = SimulateResponse & {
   _lead_nome?: string;
@@ -19,9 +30,7 @@ export function ResultadoView() {
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem("mudacao_simulacao_resultado");
-      if (raw) {
-        setData(JSON.parse(raw));
-      }
+      if (raw) setData(JSON.parse(raw));
     } catch {
       // ignora
     }
@@ -52,156 +61,170 @@ export function ResultadoView() {
     );
   }
 
-  // D4 vai refinar isso com Recharts; por agora, layout texto + KPI cards
+  // Parse strings → números (API retorna Decimals como string)
+  const deltaPorLojaMes = parseFloat(data.delta_folha_mes);
+  const deltaRedeMes = parseFloat(data.delta_folha_rede_mes);
+  const deltaRedeAno = parseFloat(data.delta_folha_rede_ano);
+  const deltaPct = parseFloat(data.delta_folha_pct);
+  const fteAtual = parseFloat(data.fte_atual);
+  const fteProposto = parseFloat(data.fte_proposto);
+  const fteExtras = parseFloat(data.fte_extras_necessarios);
+  const folhaAtual = parseFloat(data.folha_atual_mes);
+  const economiaWfm = parseFloat(data.economia_potencial_wfm);
+  const economiaWfmPct = parseFloat(data.economia_potencial_wfm_pct);
+
   return (
     <div className="space-y-6">
-      {/* Headline */}
+      {/* ============ HERO RESULTADO ============ */}
       <div className="rounded-2xl bg-mudacao-900 p-8 text-white shadow-lg">
         <p className="text-sm font-bold uppercase tracking-widest text-mudacao-100">
-          Resultado da simulação
+          {data._lead_nome
+            ? `${data._lead_nome}, aqui está seu resultado`
+            : "Resultado da simulação"}
         </p>
-        <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{data.headline}</h1>
+        <h1 className="mt-2 text-3xl font-bold leading-tight sm:text-4xl">
+          {data.headline}
+        </h1>
+
         {data._lead_email && (
           <p className="mt-4 flex items-center gap-2 text-sm text-mudacao-100">
             <Mail className="h-4 w-4" />
-            Enviamos o PDF detalhado pra <strong>{data._lead_email}</strong>
+            Enviamos o PDF detalhado pra{" "}
+            <strong className="text-white">{data._lead_email}</strong>
           </p>
         )}
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <span className="rounded-full bg-white/10 px-3 py-1 text-xs">
+            +{deltaPct.toFixed(1)}% acima da folha atual
+          </span>
+          <span className="rounded-full bg-white/10 px-3 py-1 text-xs">
+            Cenário {data.cenarios.neutro ? "neutro" : "—"}
+          </span>
+          <span className="rounded-full bg-white/10 px-3 py-1 text-xs">
+            Hash: {data.inputs_hash.slice(0, 8)}
+          </span>
+        </div>
       </div>
 
-      {/* KPI cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="Aumento mensal (rede)"
-          value={brl(parseFloat(data.delta_folha_rede_mes))}
-          accent
-        />
-        <KpiCard
-          label="Aumento anual (rede)"
-          value={brl(parseFloat(data.delta_folha_rede_ano))}
-        />
-        <KpiCard
-          label="% acima da folha atual"
-          value={`${parseFloat(data.delta_folha_pct).toFixed(1).replace(".", ",")}%`}
-        />
+      {/* ============ IMPACTO REDE ============ */}
+      <NetworkImpactCard
+        nLojas={data.n_lojas}
+        deltaPorLojaMes={deltaPorLojaMes}
+        deltaRedeMes={deltaRedeMes}
+        deltaRedeAno={deltaRedeAno}
+      />
+
+      {/* ============ GRÁFICO 3 CENÁRIOS ============ */}
+      <ScenarioChart folhaAtualMes={folhaAtual} cenarios={data.cenarios} />
+
+      {/* ============ FTE BREAKDOWN ============ */}
+      <FteBreakdown
+        fteAtual={fteAtual}
+        fteProposto={fteProposto}
+        fteExtras={fteExtras}
+        nLojas={data.n_lojas}
+      />
+
+      {/* ============ CTA WFM (PITCH PAGO) ============ */}
+      <div className="rounded-2xl border-2 border-mudacao-200 bg-gradient-to-br from-white to-mudacao-50 p-8">
+        <div className="flex items-start gap-3">
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-mudacao-100 text-mudacao-700">
+            <Lightbulb className="h-6 w-6" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold uppercase tracking-widest text-mudacao-700">
+              💡 E se você pudesse economizar?
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-mudacao-950 sm:text-3xl">
+              Com escala inteligente, sua rede economiza até{" "}
+              <span className="text-mudacao-700">{brl(economiaWfm)}/mês</span>
+            </h2>
+            <p className="mt-3 leading-relaxed text-slate-700">
+              Workforce Management baseado em IA aprende a curva de demanda da
+              sua loja e aloca pessoas com mais precisão. Reduz folha em{" "}
+              <strong>~{economiaWfmPct.toFixed(1).replace(".", ",")}%</strong>{" "}
+              sem cortar headcount — apenas colocando cada pessoa na hora certa.
+            </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <FeatureLi text="Curva de demanda por hora" />
+              <FeatureLi text="Respeita restrições CLT" />
+              <FeatureLi text="Cobertura sem ociosidade" />
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link href="/precos" className="btn-primary">
+                <Sparkles className="h-4 w-4" />
+                Quero a versão completa
+              </Link>
+              <Link href="/precos#waitlist" className="btn-secondary">
+                Avise-me no lançamento
+              </Link>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="FTEs hoje (6x1)"
-          value={parseFloat(data.fte_atual).toFixed(0)}
-        />
-        <KpiCard
-          label="FTEs necessários (5x2)"
-          value={parseFloat(data.fte_proposto).toFixed(2)}
-        />
-        <KpiCard
-          label="Contratações extras"
-          value={parseFloat(data.fte_extras_necessarios).toFixed(2)}
-        />
+      {/* ============ AÇÕES ============ */}
+      <div className="flex flex-col gap-3 rounded-xl bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-semibold text-mudacao-950">Compartilhe ou refaça</p>
+          <p className="text-sm text-slate-600">
+            O PDF completo já está no seu email — também dá pra compartilhar com sua equipe.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <ShareButton headline={data.headline} />
+          <Link
+            href="/simulador"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <ArrowLeft className="h-4 w-4" /> Nova simulação
+          </Link>
+        </div>
       </div>
 
-      {/* WFM card */}
-      <div className="card border-2 border-mudacao-200">
-        <p className="text-sm font-bold uppercase tracking-widest text-mudacao-700">
-          💡 Economia potencial com WFM
-        </p>
-        <h2 className="mt-2 text-3xl font-bold text-mudacao-950">
-          {brl(parseFloat(data.economia_potencial_wfm))} / mês
-        </h2>
-        <p className="mt-2 text-slate-600">
-          Com Workforce Management baseado em IA, sua rede pode reduzir{" "}
-          <strong>
-            ~{parseFloat(data.economia_potencial_wfm_pct).toFixed(1).replace(".", ",")}
-            %
-          </strong>{" "}
-          da folha proposta — alocando pessoas com mais precisão vs. demanda.
-        </p>
-        <Link href="/precos" className="btn-primary mt-6 inline-flex">
-          Quero a versão completa <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
-
-      {/* Comparação 3 cenários (texto, vira gráfico no D4) */}
-      <div className="card">
-        <h2 className="text-xl font-bold text-mudacao-950">
-          Comparação dos 3 cenários
-        </h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Gráfico visual chega no D4. Por enquanto, em formato tabela:
-        </p>
-        <table className="mt-4 w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-left text-slate-500">
-              <th className="pb-2">Cenário</th>
-              <th className="pb-2 text-right">FTE</th>
-              <th className="pb-2 text-right">Folha/mês</th>
-              <th className="pb-2 text-right">Δ %</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(data.cenarios).map(([key, c]) => (
-              <tr key={key} className="border-b border-slate-100">
-                <td className="py-2 font-medium capitalize text-mudacao-950">
-                  {c.cenario}
-                </td>
-                <td className="py-2 text-right">{parseFloat(c.fte_total).toFixed(2)}</td>
-                <td className="py-2 text-right">{brl(parseFloat(c.folha_total))}</td>
-                <td className="py-2 text-right">
-                  {parseFloat(c.delta_folha_pct).toFixed(1).replace(".", ",")}%
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Voltar */}
-      <Link
-        href="/simulador"
-        className="inline-flex items-center gap-1 text-sm text-mudacao-700 hover:underline"
-      >
-        <ArrowLeft className="h-4 w-4" /> Fazer nova simulação
-      </Link>
+      {/* ============ DISCLAIMER ============ */}
+      <p className="text-center text-xs text-slate-500">
+        Resultado baseado em premissas Fitch + fórmulas internas MudAção. Para
+        análise jurídica e plano de transição customizado, considere o plano
+        Enterprise.
+      </p>
     </div>
   );
 }
 
-function KpiCard({
-  label,
-  value,
-  accent = false,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
+function FeatureLi({ text }: { text: string }) {
   return (
-    <div
-      className={
-        accent
-          ? "rounded-xl bg-mudacao-700 p-5 text-white"
-          : "card"
-      }
-    >
-      <p
-        className={
-          accent
-            ? "text-xs font-semibold uppercase tracking-widest text-mudacao-100"
-            : "text-xs font-semibold uppercase tracking-widest text-slate-500"
-        }
-      >
-        {label}
-      </p>
-      <p
-        className={
-          accent
-            ? "mt-2 text-2xl font-bold"
-            : "mt-2 text-2xl font-bold text-mudacao-950"
-        }
-      >
-        {value}
-      </p>
+    <div className="flex items-center gap-2 text-sm text-slate-700">
+      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-mudacao-700 text-xs text-white">
+        ✓
+      </span>
+      {text}
     </div>
+  );
+}
+
+function ShareButton({ headline }: { headline: string }) {
+  function handleShare() {
+    const text = `${headline}\n\nSimule a sua em: https://simulaescala.mudacao.com.br`;
+    if (typeof navigator !== "undefined" && navigator.share) {
+      navigator
+        .share({ title: "MudAção Escala — Simulação", text })
+        .catch(() => {});
+    } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      alert("Texto copiado pro clipboard!");
+    }
+  }
+
+  return (
+    <button
+      onClick={handleShare}
+      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+    >
+      <Share2 className="h-4 w-4" /> Compartilhar
+    </button>
   );
 }
