@@ -112,18 +112,13 @@ async def capture_lead(
     db.commit()
     db.refresh(lead)
 
-    # Dispara email em background (não bloqueia resposta)
-    background_tasks.add_task(
-        _send_welcome_email_safe,
-        to=req.email,
-        nome=req.nome,
-        n_lojas=req.n_lojas,
-    )
+    # Rota /lead (sem simulação) não dispara email — não temos resultado
+    # pra enviar. O fluxo principal usa /lead-and-simulate que dispara.
 
     return LeadResponse(
         lead_id=str(lead.id),
         email=lead.email,
-        email_enviado=True,  # otimista — fire and forget
+        email_enviado=False,
     )
 
 
@@ -182,7 +177,6 @@ async def lead_and_simulate(
         _send_welcome_email_with_pdf_safe,
         to=lead_req.email,
         nome=lead_req.nome,
-        n_lojas=lead_req.n_lojas,
         result=result,
     )
 
@@ -194,39 +188,19 @@ async def lead_and_simulate(
 # =============================================================================
 
 
-async def _send_welcome_email_safe(*, to: str, nome: str | None, n_lojas: int) -> None:
-    try:
-        await send_lead_welcome_email(
-            to=to,
-            nome=nome,
-            headline="Sua simulação foi processada — abra o link abaixo.",
-            economia_potencial="—",
-            n_lojas=n_lojas,
-        )
-    except Exception:
-        logger.exception("Falha no background email pra %s", to)
-
-
 async def _send_welcome_email_with_pdf_safe(
     *,
     to: str,
     nome: str | None,
-    n_lojas: int,
     result: SimulateResponse,
 ) -> None:
+    """Tenta gerar PDF e enviar email. Loga erro mas nunca propaga."""
     try:
         pdf_bytes = render_simulation_pdf(result)
-        from decimal import Decimal  # noqa: PLC0415
-
-        def brl(v: Decimal) -> str:
-            return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
         await send_lead_welcome_email(
             to=to,
             nome=nome,
-            headline=result.headline,
-            economia_potencial=brl(result.economia_potencial_wfm),
-            n_lojas=n_lojas,
+            result=result,
             pdf_bytes=pdf_bytes,
         )
     except Exception:
