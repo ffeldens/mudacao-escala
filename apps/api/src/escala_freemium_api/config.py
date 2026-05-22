@@ -3,16 +3,29 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# .env mora na raiz do monorepo, mas uvicorn roda de apps/api/.
+# Caminhamos pela árvore: apps/api/src/escala_freemium_api/config.py
+#   ↓ parent             config.py
+#   ↓ parent             escala_freemium_api/
+#   ↓ parent             src/
+#   ↓ parent             apps/api/
+#   ↓ parent             apps/
+#   ↓ parent             <root>
+_ROOT_ENV = Path(__file__).resolve().parents[4] / ".env"
 
 
 class Settings(BaseSettings):
     """Configuração do app. Todas as variáveis vêm do .env ou ambiente."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Procura .env na raiz do monorepo, e também o local (apps/api/.env)
+        # como fallback. Variáveis de ambiente do shell têm precedência sobre ambos.
+        env_file=(_ROOT_ENV, ".env"),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
