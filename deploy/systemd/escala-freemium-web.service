@@ -9,8 +9,10 @@ Group=deploy
 WorkingDirectory=/opt/escala-freemium/apps/web
 EnvironmentFile=/opt/escala-freemium/.env
 Environment="NODE_ENV=production"
-Environment="PATH=/home/deploy/.local/share/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -p 8011
+Environment="PORT=8011"
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# Roda Next direto via node (não precisa pnpm em runtime, só foi usado pra build)
+ExecStart=/usr/bin/env node node_modules/next/dist/bin/next start -p 8011
 Restart=on-failure
 RestartSec=3
 
@@ -19,7 +21,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/escala-freemium
+ReadWritePaths=/opt/escala-freemium /var/log/escala-freemium
 
 [Install]
 WantedBy=multi-user.target
