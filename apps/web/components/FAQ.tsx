@@ -23,7 +23,7 @@ export const faqItems = [
   },
   {
     q: "Meus dados são seguros?",
-    a: "Sim. Nenhum dado de funcionário identificado é coletado — apenas números agregados (quantos FTEs, salário médio). Armazenamento criptografado no Supabase (Postgres na AWS São Paulo). Não vendemos dados a terceiros.",
+    a: "Sim. Nenhum dado de funcionário identificado é coletado — apenas números agregados (quantos FTEs, salário médio). Os dados ficam criptografados em banco seguro e não compartilhamos seu contato com terceiros.",
   },
   {
     q: "Em quanto tempo recebo o resultado?",
