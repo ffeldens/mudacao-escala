@@ -33,20 +33,13 @@ export const metadata: Metadata = {
     title: "Simulador PEC 8/2025 — Calcule o impacto da escala 5x2",
     description:
       "Quanto sua rede vai gastar com a nova escala 5x2? Simule grátis em 2 minutos.",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "MudAção Escala — Simulador PEC 8/2025",
-      },
-    ],
+    // Next pega o opengraph-image.tsx automaticamente
   },
   twitter: {
     card: "summary_large_image",
     title: "Simulador PEC 8/2025 — MudAção Escala",
     description: "Calcule grátis o impacto da escala 5x2 na sua rede.",
-    images: ["/og-image.png"],
+    // Next reaproveita o opengraph-image.tsx pro Twitter card
   },
   robots: {
     index: true,
