@@ -62,8 +62,17 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # =============================================================================
 
 
+# Schema explícito no metadata (só Postgres — SQLite ignora schema).
+# Sem isso, create_all() ignora o search_path e cria tudo no schema padrão.
+from sqlalchemy import MetaData  # noqa: E402
+
+_metadata = MetaData(schema=settings.DB_SCHEMA if _is_postgres else None)
+
+
 class Base(DeclarativeBase):
     """Base declarativa SQLAlchemy 2.0."""
+
+    metadata = _metadata
 
 
 class Lead(Base):
