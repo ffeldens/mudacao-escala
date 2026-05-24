@@ -73,7 +73,7 @@ export function SimulatorForm() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const step2Ref = useRef<HTMLDivElement>(null);
+  const step2Ref = useRef<HTMLFormElement>(null);
 
   // ============ Step 1 → Step 2 ============
   function handleSimSubmit(e: React.FormEvent) {
