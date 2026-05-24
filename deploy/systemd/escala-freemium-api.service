@@ -17,7 +17,10 @@ RestartSec=3
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+# ProtectHome=read-only permite executar uv em /home/deploy/.local/bin
+# (mas bloqueia escrita). Cache do uv vai pra /opt/.../tmp via UV_CACHE_DIR.
+ProtectHome=read-only
+Environment="UV_CACHE_DIR=/opt/escala-freemium/.uv-cache"
 ReadWritePaths=/opt/escala-freemium /var/log/escala-freemium
 
 [Install]
