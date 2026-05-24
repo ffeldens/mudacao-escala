@@ -12,8 +12,6 @@ simulaescala.mudacao.com.br {
     # Proxy pro Next.js (que internamente já bate na FastAPI via /api)
     reverse_proxy 127.0.0.1:8011 {
         header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
     }
 
     # Headers de segurança
@@ -26,12 +24,6 @@ simulaescala.mudacao.com.br {
         -Server
     }
 
-    # Logs
-    log {
-        output file /var/log/caddy/simulaescala.access.log {
-            roll_size 50mb
-            roll_keep 7
-        }
-        format json
-    }
+    # Logs via journalctl (sudo journalctl -u caddy | grep simulaescala)
+    # Sem log file custom em /var/log/caddy/ pra não dar permission denied.
 }
