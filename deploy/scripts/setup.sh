@@ -87,6 +87,25 @@ chown -R deploy:deploy /opt/escala-freemium
 mkdir -p /var/log/escala-freemium
 chown deploy:deploy /var/log/escala-freemium
 
+# Regra sudoers — permite ao user 'deploy' usar systemctl, caddy etc sem senha
+SUDOERS_FILE="/etc/sudoers.d/escala-freemium-deploy"
+if [[ ! -f "$SUDOERS_FILE" ]]; then
+    warn "Criando regra sudoers pro user deploy"
+    tee "$SUDOERS_FILE" > /dev/null <<'EOSUDO'
+# Permite ao user 'deploy' gerenciar os services do escala-freemium sem senha.
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl, /bin/systemctl
+deploy ALL=(root) NOPASSWD: /usr/bin/journalctl, /bin/journalctl
+deploy ALL=(root) NOPASSWD: /usr/bin/caddy, /usr/sbin/caddy
+deploy ALL=(root) NOPASSWD: /usr/bin/tee, /bin/tee
+deploy ALL=(root) NOPASSWD: /usr/bin/cp, /bin/cp
+deploy ALL=(root) NOPASSWD: /usr/bin/nginx
+EOSUDO
+    chmod 0440 "$SUDOERS_FILE"
+    if ! visudo -c -f "$SUDOERS_FILE" >/dev/null 2>&1; then
+        fail "sudoers inválido em $SUDOERS_FILE"
+    fi
+fi
+
 # ============================================================================
 log "5/6 — Verificando uv (Python pkg manager) pro user deploy"
 # ============================================================================
