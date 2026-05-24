@@ -55,11 +55,19 @@ NODE_VERSION=$(node --version)
 log "Node: $NODE_VERSION"
 
 # ============================================================================
-log "3/6 — Verificando pnpm"
+log "3/6 — Verificando pnpm (pin v9 pra compatibilidade com Node 18+)"
 # ============================================================================
-if ! command -v pnpm >/dev/null 2>&1; then
-    warn "pnpm não encontrado — instalando global via npm"
-    npm install -g pnpm
+# pnpm 10+ exige Node 22. Como a VPS pode ter Node 18 (outros apps),
+# pinamos pnpm@9 que funciona em Node 18, 20 e 22.
+PNPM_INSTALLED_VERSION=""
+if command -v pnpm >/dev/null 2>&1; then
+    PNPM_INSTALLED_VERSION=$(pnpm --version 2>/dev/null || echo "")
+fi
+
+# Se pnpm não existe OU é versão >= 10, instala pnpm@9
+if [[ -z "$PNPM_INSTALLED_VERSION" ]] || [[ "${PNPM_INSTALLED_VERSION%%.*}" -ge 10 ]]; then
+    warn "Instalando pnpm@9 (compatível com Node 18+)"
+    npm install -g pnpm@9
 fi
 log "pnpm: $(pnpm --version)"
 
