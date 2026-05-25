@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -53,6 +54,8 @@ export const metadata: Metadata = {
   },
 };
 
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
+
 export default function RootLayout({
   children,
 }: {
@@ -60,9 +63,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body>
-        {children}
-      </body>
+      <body>{children}</body>
+      {/* Carrega GA4 apenas se NEXT_PUBLIC_GA_ID estiver setado (prod) */}
+      {GA_ID && <GoogleAnalytics gaId={GA_ID} />}
     </html>
   );
 }

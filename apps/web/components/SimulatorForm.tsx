@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { sendGAEvent } from "@next/third-parties/google";
 import {
   ArrowRight,
   Building2,
@@ -59,6 +60,7 @@ const INITIAL_SIM: SimFormState = {
 const INITIAL_LEAD: LeadFormData = {
   nome: "",
   email: "",
+  email_confirm: "",
   whatsapp: "",
   empresa: "",
 };
@@ -95,6 +97,14 @@ export function SimulatorForm() {
     }
     setSimErrors({});
     setStep(2);
+
+    // GA4: usuário completou step 1 (interesse alto, antes do gate)
+    sendGAEvent("event", "simulator_step1_complete", {
+      porte: parsed.porte,
+      setor: parsed.setor,
+      n_lojas_rede: parsed.n_lojas_rede,
+      cenario: parsed.cenario,
+    });
 
     // Scroll suave pro step 2
     setTimeout(() => {
@@ -155,6 +165,15 @@ export function SimulatorForm() {
           _lead_email: leadResult.data.email,
         }),
       );
+
+      // GA4: lead capturado (conversão principal — monitorar essa métrica)
+      sendGAEvent("event", "lead_capture", {
+        value: 1,
+        n_lojas: leadResult.data.email && simParsed.n_lojas_rede,
+        porte: simParsed.porte,
+        setor: simParsed.setor,
+        delta_folha_pct: parseFloat(data.delta_folha_pct),
+      });
 
       router.push("/simulador/resultado");
     } catch (err) {
@@ -483,6 +502,25 @@ export function SimulatorForm() {
                   value={lead.email}
                   onChange={(e) => setLead({ ...lead, email: e.target.value })}
                   placeholder="seu@email.com"
+                  autoComplete="email"
+                />
+              </Field>
+
+              <Field
+                label="Confirmar email"
+                error={leadErrors.email_confirm}
+                hint="Digite de novo pra evitar typos"
+              >
+                <input
+                  type="email"
+                  className="input"
+                  value={lead.email_confirm}
+                  onChange={(e) =>
+                    setLead({ ...lead, email_confirm: e.target.value })
+                  }
+                  placeholder="seu@email.com"
+                  autoComplete="email"
+                  onPaste={(e) => e.preventDefault()}
                 />
               </Field>
 

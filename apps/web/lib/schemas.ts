@@ -75,17 +75,23 @@ export type SimulationFormData = z.infer<typeof simulationSchema>;
 // Lead
 // =============================================================================
 
-export const leadSchema = z.object({
-  nome: z
-    .string()
-    .trim()
-    .min(2, "Informe seu nome")
-    .max(120, "Nome muito longo"),
-  email: z.string().email("Email inválido"),
-  whatsapp: phoneBR,
-  empresa: z.string().trim().max(120).optional().or(z.literal("")),
-  // utm_*: capturados auto da URL pelo componente
-});
+export const leadSchema = z
+  .object({
+    nome: z
+      .string()
+      .trim()
+      .min(2, "Informe seu nome")
+      .max(120, "Nome muito longo"),
+    email: z.string().email("Email inválido"),
+    email_confirm: z.string().email("Confirmação inválida"),
+    whatsapp: phoneBR,
+    empresa: z.string().trim().max(120).optional().or(z.literal("")),
+    // utm_*: capturados auto da URL pelo componente
+  })
+  .refine((d) => d.email.toLowerCase() === d.email_confirm.toLowerCase(), {
+    message: "Os emails não coincidem",
+    path: ["email_confirm"],
+  });
 
 export type LeadFormData = z.infer<typeof leadSchema>;
 
