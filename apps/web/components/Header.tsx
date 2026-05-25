@@ -1,10 +1,14 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, User as UserIcon } from "lucide-react";
+import { getCurrentUser } from "@/lib/supabase/auth";
+import { LogoutButton } from "./LogoutButton";
 
-export function Header() {
+export async function Header() {
+  const user = await getCurrentUser();
+
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/60 bg-white/80 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
         <Link
           href="/"
           className="flex items-center gap-2 font-bold text-mudacao-900"
@@ -33,9 +37,30 @@ export function Header() {
           </Link>
         </nav>
 
-        <Link href="/simulador" className="btn-primary text-sm">
-          Simular grátis <ArrowRight className="h-4 w-4" />
-        </Link>
+        <div className="flex items-center gap-2">
+          {user ? (
+            <>
+              <Link
+                href="/minha-conta"
+                className="hidden items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:inline-flex"
+              >
+                <UserIcon className="h-4 w-4" />
+                Minha conta
+              </Link>
+              <LogoutButton />
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="hidden rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:inline-block"
+            >
+              Entrar
+            </Link>
+          )}
+          <Link href="/simulador" className="btn-primary text-sm">
+            Simular grátis <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
       </div>
     </header>
   );
