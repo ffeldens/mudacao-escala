@@ -54,18 +54,21 @@ export const metadata: Metadata = {
   },
 };
 
-const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
+// Referência direta a process.env.NEXT_PUBLIC_GA_ID (sem var intermediária)
+// pra garantir que o Next bake o valor em build time. Default vazio = GA off.
+// Em dev local, deixar a env var unset desativa silenciosamente.
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const gaId = process.env.NEXT_PUBLIC_GA_ID ?? "";
+
   return (
     <html lang="pt-BR">
       <body>{children}</body>
-      {/* Carrega GA4 apenas se NEXT_PUBLIC_GA_ID estiver setado (prod) */}
-      {GA_ID && <GoogleAnalytics gaId={GA_ID} />}
+      {gaId.startsWith("G-") && <GoogleAnalytics gaId={gaId} />}
     </html>
   );
 }
