@@ -41,7 +41,7 @@ export default function PrivacidadePage() {
               <p>
                 <strong>MudAção</strong> — consultoria de cultura, estratégia
                 e liderança, representada por Felipe Feldens
-                (felipe@mudacao.com.br).
+                (felipe@feldens.com).
               </p>
               <p>
                 Esta política aplica-se ao serviço <strong>MudAção
@@ -226,10 +226,10 @@ export default function PrivacidadePage() {
               <p>
                 Para exercer qualquer destes direitos, envie um email para{" "}
                 <a
-                  href="mailto:felipe@mudacao.com.br"
+                  href="mailto:felipe@feldens.com"
                   className="text-mudacao-700 underline"
                 >
-                  felipe@mudacao.com.br
+                  felipe@feldens.com
                 </a>{" "}
                 com o assunto "LGPD — solicitação de dados".
               </p>
@@ -256,10 +256,10 @@ export default function PrivacidadePage() {
                 O encarregado de proteção de dados (DPO) é{" "}
                 <strong>Felipe Feldens</strong>, contatável em{" "}
                 <a
-                  href="mailto:felipe@mudacao.com.br"
+                  href="mailto:felipe@feldens.com"
                   className="text-mudacao-700 underline"
                 >
-                  felipe@mudacao.com.br
+                  felipe@feldens.com
                 </a>
                 .
               </p>

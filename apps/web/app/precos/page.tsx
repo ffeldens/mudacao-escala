@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Check, ArrowRight } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { WaitlistForm } from "@/components/WaitlistForm";
 
 export const metadata = {
   title: "Planos e preços",
@@ -39,7 +40,7 @@ const tiers = [
       "Suporte por email",
     ],
     cta: "Avise-me no lançamento",
-    href: "#waitlist",
+    href: "#waitlist?plano=starter",
     highlight: true,
   },
   {
@@ -56,7 +57,7 @@ const tiers = [
       "Suporte prioritário",
     ],
     cta: "Avise-me no lançamento",
-    href: "#waitlist",
+    href: "#waitlist?plano=pro",
     highlight: false,
   },
   {
@@ -72,8 +73,8 @@ const tiers = [
       "Integrações customizadas",
       "Treinamento equipe RH",
     ],
-    cta: "Falar com Felipe",
-    href: "mailto:felipe@feldens.com?subject=MudA%C3%A7%C3%A3o%20Escala%20Enterprise",
+    cta: "Tenho interesse",
+    href: "#waitlist?plano=enterprise",
     highlight: false,
   },
 ];
@@ -148,20 +149,38 @@ export default function PrecosPage() {
             ))}
           </div>
 
-          <div
-            id="waitlist"
-            className="mx-auto mt-20 max-w-2xl rounded-2xl bg-mudacao-50 p-8 text-center"
-          >
-            <h2 className="text-2xl font-bold text-mudacao-950">
-              🚀 Lançamento dos planos pagos em breve
-            </h2>
-            <p className="mt-3 text-slate-600">
-              Use o simulador grátis hoje. Quando os planos pagos estiverem
-              ativos, você é o primeiro a saber.
-            </p>
-            <Link href="/simulador" className="btn-primary mt-6">
-              Simular agora <ArrowRight className="h-4 w-4" />
-            </Link>
+          {/* Waitlist único — o WaitlistForm lê ?plano=... do hash e pré-seleciona */}
+          <div id="waitlist" className="mx-auto mt-20 max-w-2xl space-y-6 scroll-mt-24">
+            <WaitlistForm />
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5 text-center text-sm text-slate-600">
+              Prefere conversar?{" "}
+              <a
+                href="https://wa.me/5511996325174?text=Oi%20Felipe%2C%20tenho%20interesse%20nos%20planos%20pagos%20do%20MudA%C3%A7%C3%A3o%20Escala"
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-mudacao-700 underline hover:text-mudacao-900"
+              >
+                Chama o Felipe no WhatsApp
+              </a>{" "}
+              ou{" "}
+              <a
+                href="mailto:felipe@feldens.com?subject=MudA%C3%A7%C3%A3o%20Escala%20Planos"
+                className="font-semibold text-mudacao-700 underline hover:text-mudacao-900"
+              >
+                envia um email
+              </a>
+              .
+            </div>
+
+            <div className="text-center">
+              <Link
+                href="/simulador"
+                className="inline-flex items-center gap-1 text-sm text-mudacao-700 underline hover:text-mudacao-900"
+              >
+                Ou volte pro simulador grátis <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
         </div>
       </main>

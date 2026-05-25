@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field  # noqa: F401
 
 # =============================================================================
 # Inputs simplificados
@@ -124,6 +124,33 @@ class LeadResponse(BaseModel):
     lead_id: str
     email: str
     email_enviado: bool
+
+
+# =============================================================================
+# Waitlist (avise-me dos planos pagos)
+# =============================================================================
+
+
+PlanoInteresse = Literal["starter", "pro", "enterprise"]
+
+
+class WaitlistRequest(BaseModel):
+    """Form curto da waitlist — capta interesse em planos pagos."""
+
+    nome: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    plano: PlanoInteresse
+    empresa: str | None = Field(default=None, max_length=120)
+    n_lojas: int | None = Field(default=None, ge=0, le=10_000)
+
+    utm_source: str | None = None
+    utm_medium: str | None = None
+    utm_campaign: str | None = None
+
+
+class WaitlistResponse(BaseModel):
+    lead_id: str
+    email: str
 
 
 # =============================================================================

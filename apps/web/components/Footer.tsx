@@ -62,10 +62,10 @@ export function Footer() {
             <ul className="mt-4 space-y-2 text-sm text-slate-700">
               <li>
                 <a
-                  href="mailto:felipe@mudacao.com.br"
+                  href="mailto:felipe@feldens.com"
                   className="hover:text-mudacao-900"
                 >
-                  felipe@mudacao.com.br
+                  felipe@feldens.com
                 </a>
               </li>
               <li>

@@ -137,6 +137,107 @@ def _only_digits(s: str) -> str:
     return "".join(c for c in s if c.isdigit())
 
 
+async def send_waitlist_admin_notification(
+    *,
+    nome: str,
+    email: str,
+    plano: str,
+    empresa: str | None,
+    n_lojas: int | None,
+) -> bool:
+    """Notifica o admin (Felipe) quando alguém entra na waitlist dos planos pagos."""
+    settings = get_settings()
+
+    if not settings.RESEND_API_KEY or not settings.ADMIN_NOTIFY_EMAIL:
+        return False
+
+    PLANOS_PT = {
+        "starter": "Starter (R$ 99/mês)",
+        "pro": "Pro (R$ 299/mês)",
+        "enterprise": "Enterprise (sob consulta)",
+    }
+    plano_label = PLANOS_PT.get(plano, plano)
+    empresa_label = empresa or "(sem empresa)"
+    n_lojas_label = str(n_lojas) if n_lojas else "(não informado)"
+
+    html = f"""\
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Novo interesse em plano pago</title></head>
+<body style="font-family:-apple-system,'Segoe UI',sans-serif;color:#1a1a1a;
+             line-height:1.5;max-width:600px;margin:0 auto;padding:24px;">
+  <div style="background:#0a4a3a;color:#fff;padding:16px 20px;border-radius:8px;">
+    <p style="margin:0;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;
+              color:#b8dcc8;font-weight:600;">
+      🚀 MudAção Escala — Waitlist
+    </p>
+    <h1 style="margin:6px 0 0;font-size:22px;">Novo interesse em plano pago</h1>
+  </div>
+
+  <div style="background:#dbeee4;padding:14px;border-radius:6px;margin:16px 0;">
+    <p style="margin:0;font-size:12px;color:#0a4a3a;text-transform:uppercase;
+              letter-spacing:1px;font-weight:700;">Plano de interesse</p>
+    <p style="margin:6px 0 0;font-size:20px;font-weight:700;color:#062920;">
+      {plano_label}
+    </p>
+  </div>
+
+  <h2 style="color:#0a4a3a;font-size:16px;margin:24px 0 8px;">Contato</h2>
+  <table style="width:100%;border-collapse:collapse;">
+    <tr><td style="padding:6px 0;color:#64748b;width:120px;">Nome</td>
+        <td style="padding:6px 0;font-weight:600;">{nome}</td></tr>
+    <tr><td style="padding:6px 0;color:#64748b;">Email</td>
+        <td style="padding:6px 0;font-weight:600;"><a href="mailto:{email}"
+            style="color:#0a4a3a;">{email}</a></td></tr>
+    <tr><td style="padding:6px 0;color:#64748b;">Empresa</td>
+        <td style="padding:6px 0;">{empresa_label}</td></tr>
+    <tr><td style="padding:6px 0;color:#64748b;">Lojas na rede</td>
+        <td style="padding:6px 0;">{n_lojas_label}</td></tr>
+  </table>
+
+  <p style="margin:24px 0 0;padding:12px;background:#f5f7f6;border-radius:6px;
+            font-size:12px;color:#64748b;">
+    Lead interessado em planos pagos. Quando os planos lançarem oficialmente,
+    avisar este contato em primeira mão. Responder este email vai direto pro lead.
+  </p>
+</body>
+</html>
+"""
+
+    payload = {
+        "from": f"MudAção Escala <{settings.RESEND_FROM_EMAIL}>",
+        "to": [settings.ADMIN_NOTIFY_EMAIL],
+        "reply_to": email,
+        "subject": f"🚀 Waitlist: {nome} interessado em {plano_label}",
+        "html": html,
+        "tags": [
+            {"name": "category", "value": "waitlist_signup"},
+            {"name": "plano", "value": plano},
+            {"name": "env", "value": settings.APP_ENV},
+        ],
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                RESEND_API_URL,
+                headers={
+                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            if r.status_code >= 400:
+                logger.error("Resend waitlist notify retornou %s: %s", r.status_code, r.text)
+                return False
+            logger.info("Waitlist notification enviado pra %s (plano=%s, lead=%s)",
+                        settings.ADMIN_NOTIFY_EMAIL, plano, email)
+            return True
+    except httpx.HTTPError as e:
+        logger.exception("Falha waitlist notification: %s", e)
+        return False
+
+
 async def send_lead_welcome_email(
     *,
     to: str,

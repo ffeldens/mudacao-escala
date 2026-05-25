@@ -39,8 +39,8 @@ export default function TermosPage() {
               <p>
                 O serviço é oferecido por <strong>MudAção</strong> —
                 consultoria de cultura, estratégia e liderança, com sede em
-                Porto Alegre/RS, representada por Felipe Feldens
-                (felipe@mudacao.com.br).
+                São Paulo/SP, representada por Felipe Feldens
+                (felipe@feldens.com).
               </p>
             </Section>
 
@@ -132,7 +132,7 @@ export default function TermosPage() {
             <Section title="8. Lei aplicável e foro">
               <p>
                 Estes Termos regem-se pelas leis da República Federativa do
-                Brasil. Fica eleito o foro da comarca de Porto Alegre/RS para
+                Brasil. Fica eleito o foro da comarca de São Paulo/SP para
                 dirimir eventuais controvérsias.
               </p>
             </Section>
@@ -145,10 +145,10 @@ export default function TermosPage() {
                 <li>
                   Email:{" "}
                   <a
-                    href="mailto:felipe@mudacao.com.br"
+                    href="mailto:felipe@feldens.com"
                     className="text-mudacao-700 underline"
                   >
-                    felipe@mudacao.com.br
+                    felipe@feldens.com
                   </a>
                 </li>
                 <li>

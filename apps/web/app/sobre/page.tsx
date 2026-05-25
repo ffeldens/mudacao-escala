@@ -112,9 +112,9 @@ export default function SobrePage() {
                 <Linkedin className="h-4 w-4" />
                 LinkedIn MudAção
               </a>
-              <a href="mailto:felipe@mudacao.com.br" className="btn-secondary text-sm">
+              <a href="mailto:felipe@feldens.com" className="btn-secondary text-sm">
                 <Mail className="h-4 w-4" />
-                felipe@mudacao.com.br
+                felipe@feldens.com
               </a>
             </div>
           </div>

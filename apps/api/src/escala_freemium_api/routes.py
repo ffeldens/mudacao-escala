@@ -14,6 +14,7 @@ from escala_freemium_api.db import Lead, Simulation, get_db
 from escala_freemium_api.email_sender import (
     send_admin_notification,
     send_lead_welcome_email,
+    send_waitlist_admin_notification,
 )
 from escala_freemium_api.pdf import render_simulation_pdf
 from escala_freemium_api.schemas import (
@@ -23,6 +24,8 @@ from escala_freemium_api.schemas import (
     SimulateRequest,
     SimulateResponse,
     VersionResponse,
+    WaitlistRequest,
+    WaitlistResponse,
 )
 from escala_freemium_api.simulation_adapter import run_simulation
 
@@ -123,6 +126,68 @@ async def capture_lead(
         email=lead.email,
         email_enviado=False,
     )
+
+
+# =============================================================================
+# Waitlist (avise-me sobre planos pagos)
+# =============================================================================
+
+
+@router.post("/waitlist", response_model=WaitlistResponse, tags=["leads"])
+async def waitlist_signup(
+    req: WaitlistRequest,
+    background_tasks: BackgroundTasks,
+    db: DbSession,
+) -> WaitlistResponse:
+    """Cadastra na waitlist dos planos pagos + dispara notificação admin."""
+    # Reaproveita a tabela `leads` com source distintivo
+    lead = Lead(
+        email=req.email,
+        nome=req.nome,
+        empresa=req.empresa,
+        n_lojas=req.n_lojas or 0,
+        porte="M",  # placeholder — waitlist não pede porte
+        setor="outros",  # placeholder
+        source=f"waitlist_{req.plano}",
+        utm_source=req.utm_source,
+        utm_medium=req.utm_medium,
+        utm_campaign=req.utm_campaign,
+    )
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+
+    # Notification admin em background
+    background_tasks.add_task(
+        _send_waitlist_notification_safe,
+        nome=req.nome,
+        email=req.email,
+        plano=req.plano,
+        empresa=req.empresa,
+        n_lojas=req.n_lojas,
+    )
+
+    return WaitlistResponse(lead_id=str(lead.id), email=lead.email)
+
+
+async def _send_waitlist_notification_safe(
+    *,
+    nome: str,
+    email: str,
+    plano: str,
+    empresa: str | None,
+    n_lojas: int | None,
+) -> None:
+    try:
+        await send_waitlist_admin_notification(
+            nome=nome,
+            email=email,
+            plano=plano,
+            empresa=empresa,
+            n_lojas=n_lojas,
+        )
+    except Exception:
+        logger.exception("Falha waitlist notify (plano=%s, lead=%s)", plano, email)
 
 
 # =============================================================================
