@@ -38,7 +38,7 @@ cd "$APP_DIR"
 
 log "4/5 — Restart API"
 sudo systemctl restart escala-freemium-api
-sleep 2
+sleep 3
 sudo systemctl is-active --quiet escala-freemium-api || fail "API não subiu"
 
 log "5/5 — Restart Web"
@@ -46,7 +46,14 @@ sudo systemctl restart escala-freemium-web
 sleep 3
 sudo systemctl is-active --quiet escala-freemium-web || fail "Web não subiu"
 
-# Healthcheck
+# Healthcheck com retry — uv + conexão Supabase pode levar até 10s no startup
+log "Healthcheck (até 15s)..."
+for i in {1..15}; do
+    if curl -fsS http://127.0.0.1:8012/api/health >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
 curl -fsS http://127.0.0.1:8012/api/health >/dev/null || fail "API healthcheck falhou"
 curl -fsS http://127.0.0.1:8011 >/dev/null || fail "Web healthcheck falhou"
 
