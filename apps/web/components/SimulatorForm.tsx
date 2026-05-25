@@ -63,6 +63,7 @@ const INITIAL_LEAD: LeadFormData = {
   email_confirm: "",
   whatsapp: "",
   empresa: "",
+  aceite_lgpd: false as unknown as true,
 };
 
 export function SimulatorForm() {
@@ -545,6 +546,50 @@ export function SimulatorForm() {
                   placeholder="ex: Sua Rede S.A."
                 />
               </Field>
+            </div>
+
+            {/* LGPD consent */}
+            <div className="mt-6 border-t border-slate-100 pt-4">
+              <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-5 w-5 cursor-pointer accent-mudacao-700"
+                  checked={!!lead.aceite_lgpd}
+                  onChange={(e) =>
+                    setLead({
+                      ...lead,
+                      aceite_lgpd: e.target.checked as unknown as true,
+                    })
+                  }
+                />
+                <span>
+                  Li e concordo com os{" "}
+                  <a
+                    href="/termos"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-mudacao-700 underline hover:text-mudacao-900"
+                  >
+                    Termos de Uso
+                  </a>{" "}
+                  e a{" "}
+                  <a
+                    href="/privacidade"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-mudacao-700 underline hover:text-mudacao-900"
+                  >
+                    Política de Privacidade
+                  </a>
+                  . Autorizo o uso dos meus dados pra entregar o relatório e
+                  manter contato sobre o produto.
+                </span>
+              </label>
+              {leadErrors.aceite_lgpd && (
+                <p className="mt-1 text-xs text-red-600">
+                  {leadErrors.aceite_lgpd}
+                </p>
+              )}
             </div>
           </Section>
 

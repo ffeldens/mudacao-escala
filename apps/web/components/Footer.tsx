@@ -93,6 +93,15 @@ export function Footer() {
         </div>
 
         <div className="mt-10 border-t border-slate-200 pt-6 text-center text-xs text-slate-500">
+          <div className="mb-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+            <Link href="/termos" className="hover:text-mudacao-900">
+              Termos de Uso
+            </Link>
+            <span aria-hidden>·</span>
+            <Link href="/privacidade" className="hover:text-mudacao-900">
+              Política de Privacidade
+            </Link>
+          </div>
           © {year} MudAção. Todos os direitos reservados.
         </div>
       </div>

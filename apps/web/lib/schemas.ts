@@ -86,6 +86,11 @@ export const leadSchema = z
     email_confirm: z.string().email("Confirmação inválida"),
     whatsapp: phoneBR,
     empresa: z.string().trim().max(120).optional().or(z.literal("")),
+    aceite_lgpd: z.literal(true, {
+      errorMap: () => ({
+        message: "Você precisa aceitar os Termos e a Política de Privacidade",
+      }),
+    }),
     // utm_*: capturados auto da URL pelo componente
   })
   .refine((d) => d.email.toLowerCase() === d.email_confirm.toLowerCase(), {
