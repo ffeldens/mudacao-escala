@@ -29,7 +29,12 @@ log "2/5 — uv sync (API + engine)"
 cd apps/api && uv sync && cd "$APP_DIR"
 
 log "3/5 — pnpm install + build (Web)"
-cd apps/web && pnpm install --frozen-lockfile && pnpm build && cd "$APP_DIR"
+cd "$APP_DIR/apps/web"
+pnpm install --frozen-lockfile
+# Carrega vars do .env (NEXT_PUBLIC_* sao bakeadas no bundle em build time)
+set -a; source "$APP_DIR/.env"; set +a
+pnpm build
+cd "$APP_DIR"
 
 log "4/5 — Restart API"
 sudo systemctl restart escala-freemium-api

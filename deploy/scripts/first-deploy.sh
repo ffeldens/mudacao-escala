@@ -66,6 +66,8 @@ log "3/7 — pnpm install + build (Web)"
 # ============================================================================
 cd "$APP_DIR/apps/web"
 pnpm install --frozen-lockfile
+# Carrega vars do .env (NEXT_PUBLIC_* sao bakeadas no bundle em build time)
+set -a; source "$APP_DIR/.env"; set +a
 pnpm build
 cd "$APP_DIR"
 
