@@ -43,6 +43,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/sobre" className="hover:text-mudacao-900">
+                  Sobre
+                </Link>
+              </li>
+              <li>
                 <Link href="/#faq" className="hover:text-mudacao-900">
                   FAQ
                 </Link>
@@ -57,13 +62,32 @@ export function Footer() {
             <ul className="mt-4 space-y-2 text-sm text-slate-700">
               <li>
                 <a
-                  href="mailto:felipe@feldens.com"
+                  href="mailto:felipe@mudacao.com.br"
                   className="hover:text-mudacao-900"
                 >
-                  felipe@feldens.com
+                  felipe@mudacao.com.br
                 </a>
               </li>
-              <li className="text-slate-500">Felipe Feldens</li>
+              <li>
+                <a
+                  href="https://wa.me/5511996325174"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:text-mudacao-900"
+                >
+                  WhatsApp: (11) 99632-5174
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://www.linkedin.com/company/mudacao"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:text-mudacao-900"
+                >
+                  LinkedIn
+                </a>
+              </li>
             </ul>
           </div>
         </div>

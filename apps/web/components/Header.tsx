@@ -28,6 +28,9 @@ export function Header() {
           <Link href="/precos" className="hover:text-mudacao-900">
             Preços
           </Link>
+          <Link href="/sobre" className="hover:text-mudacao-900">
+            Sobre
+          </Link>
         </nav>
 
         <Link href="/simulador" className="btn-primary text-sm">
