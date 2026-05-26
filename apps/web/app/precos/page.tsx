@@ -3,6 +3,7 @@ import { Check, ArrowRight } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { WaitlistForm } from "@/components/WaitlistForm";
+import { SubscribeButton } from "@/components/SubscribeButton";
 
 export const metadata = {
   title: "Planos e preços",
@@ -33,15 +34,16 @@ const tiers = [
     description: "Pra lojas únicas e franquias pequenas",
     features: [
       "Tudo do Free",
-      "Até 5 lojas",
       "Histórico de simulações",
+      "Premissas customizadas",
       "Validador CLT em PDF",
-      "Import CSV de RH",
-      "Suporte por email",
+      "Comparativo entre cenários",
+      "Export Excel + Suporte WhatsApp",
     ],
-    cta: "Avise-me no lançamento",
-    href: "#waitlist?plano=starter",
+    cta: "Assinar Starter — 14 dias grátis",
+    href: "",
     highlight: true,
+    subscribable: "starter" as const,
   },
   {
     name: "Pro",
@@ -135,16 +137,26 @@ export default function PrecosPage() {
                   ))}
                 </ul>
 
-                <Link
-                  href={tier.href}
-                  className={
-                    tier.highlight
-                      ? "btn-primary mt-8 w-full"
-                      : "btn-secondary mt-8 w-full"
-                  }
-                >
-                  {tier.cta} <ArrowRight className="h-4 w-4" />
-                </Link>
+                {"subscribable" in tier && tier.subscribable ? (
+                  <div className="mt-8">
+                    <SubscribeButton
+                      plano={tier.subscribable}
+                      label={tier.cta}
+                      size="sm"
+                    />
+                  </div>
+                ) : (
+                  <Link
+                    href={tier.href}
+                    className={
+                      tier.highlight
+                        ? "btn-primary mt-8 w-full"
+                        : "btn-secondary mt-8 w-full"
+                    }
+                  >
+                    {tier.cta} <ArrowRight className="h-4 w-4" />
+                  </Link>
+                )}
               </div>
             ))}
           </div>

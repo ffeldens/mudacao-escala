@@ -53,6 +53,16 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
 
+    # JWT secret pro backend validar tokens (Supabase → Settings → API → JWT Secret)
+    SUPABASE_JWT_SECRET: str = ""
+
+    # Stripe
+    STRIPE_SECRET_KEY: str = ""           # sk_test_... ou sk_live_...
+    STRIPE_PUBLISHABLE_KEY: str = ""      # pk_test_... ou pk_live_...
+    STRIPE_WEBHOOK_SECRET: str = ""       # whsec_... (validar webhooks)
+    STRIPE_PRICE_ID_STARTER: str = ""     # price_... (criado no dashboard Stripe)
+    STRIPE_TRIAL_DAYS: int = 14
+
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"

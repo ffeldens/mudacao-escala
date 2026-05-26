@@ -154,6 +154,24 @@ class WaitlistResponse(BaseModel):
 
 
 # =============================================================================
+# Stripe
+# =============================================================================
+
+
+class CheckoutSessionRequest(BaseModel):
+    """Request pra criar checkout — só precisa do plano (user vem do JWT)."""
+
+    plano: Literal["starter"] = "starter"
+
+
+class CheckoutSessionResponse(BaseModel):
+    """Resposta com URL do Stripe Checkout pra redirecionamento."""
+
+    session_id: str
+    url: str
+
+
+# =============================================================================
 # Health/version
 # =============================================================================
 

@@ -9,8 +9,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from escala_freemium_api import __version__
+from escala_freemium_api.auth_dep import CurrentUser
 from escala_freemium_api.config import get_settings
-from escala_freemium_api.db import Lead, Simulation, get_db
+from escala_freemium_api.db import Lead, Simulation, UserProfile, get_db
 from escala_freemium_api.email_sender import (
     send_admin_notification,
     send_lead_welcome_email,
@@ -18,6 +19,8 @@ from escala_freemium_api.email_sender import (
 )
 from escala_freemium_api.pdf import render_simulation_pdf
 from escala_freemium_api.schemas import (
+    CheckoutSessionRequest,
+    CheckoutSessionResponse,
     HealthResponse,
     LeadRequest,
     LeadResponse,
@@ -28,6 +31,7 @@ from escala_freemium_api.schemas import (
     WaitlistResponse,
 )
 from escala_freemium_api.simulation_adapter import run_simulation
+from escala_freemium_api.stripe_service import create_checkout_session
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +263,61 @@ async def lead_and_simulate(
     )
 
     return result
+
+
+# =============================================================================
+# Stripe — Checkout
+# =============================================================================
+
+
+@router.post(
+    "/stripe/checkout-session",
+    response_model=CheckoutSessionResponse,
+    tags=["billing"],
+)
+async def stripe_checkout(
+    req: CheckoutSessionRequest,
+    user: CurrentUser,
+    db: DbSession,
+) -> CheckoutSessionResponse:
+    """Cria uma Stripe Checkout Session pro plano selecionado.
+
+    Requer Authorization: Bearer <jwt do Supabase>.
+    """
+    settings = get_settings()
+
+    # Busca profile do user (DB sempre tem após o trigger handle_new_user)
+    profile = db.get(UserProfile, user.id)
+    if not profile:
+        raise HTTPException(
+            status_code=404,
+            detail="Perfil não encontrado — recarregue a página",
+        )
+
+    # URLs de retorno do Stripe (após sucesso/cancelamento)
+    base = settings.APP_BASE_URL.rstrip("/")
+    success_url = (
+        f"{base}/minha-conta?checkout=success"
+        "&session_id={CHECKOUT_SESSION_ID}"
+    )
+    cancel_url = f"{base}/precos?checkout=canceled"
+
+    try:
+        result = create_checkout_session(
+            db=db,
+            profile=profile,
+            plano=req.plano,
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+    except ValueError as e:
+        # Erros previsíveis (assinatura já ativa, plano inválido)
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        # Configuração faltando
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return CheckoutSessionResponse(**result)
 
 
 # =============================================================================

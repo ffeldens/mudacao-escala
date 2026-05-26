@@ -102,6 +102,34 @@ class Lead(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class UserProfile(Base):
+    """Mirror da tabela freemium.user_profiles (criada via SQL).
+
+    O backend usa essa model pra ler/atualizar dados do user (plano,
+    stripe_customer_id, etc) sem precisar passar pelo PostgREST/RLS.
+    """
+
+    __tablename__ = "user_profiles"
+
+    # id = auth.users.id (FK definida em SQL, não em SQLAlchemy pra evitar
+    # cross-schema FK issues)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    email: Mapped[str] = mapped_column(String(255))
+    nome: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    empresa: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    whatsapp: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    plan_tier: Mapped[str] = mapped_column(String(20), default="free")
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    subscription_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    trial_end_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    subscription_current_period_end: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Simulation(Base):
     """Cada simulação rodada (com ou sem lead)."""
 
