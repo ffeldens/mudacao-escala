@@ -1,5 +1,11 @@
 """Dependency FastAPI que valida JWT do Supabase.
 
+Suporta dois modos automaticamente:
+- HS256 com SUPABASE_JWT_SECRET (Supabase legacy / chave simétrica)
+- RS256/ES256 via JWKS (Supabase moderno com asymmetric signing keys)
+
+Tenta HS256 primeiro. Se falhar com "alg not allowed", cai pra JWKS.
+
 Uso em rotas protegidas:
     from .auth_dep import CurrentUser
 
@@ -16,6 +22,7 @@ from typing import Annotated
 
 import jwt
 from fastapi import Depends, Header, HTTPException, status
+from jwt import PyJWKClient
 
 from escala_freemium_api.config import get_settings
 
@@ -30,30 +37,83 @@ class AuthenticatedUser:
     email: str
 
 
-def _decode_token(token: str) -> dict:
-    """Decodifica + valida o JWT do Supabase via HS256 + JWT secret."""
-    settings = get_settings()
-    if not settings.SUPABASE_JWT_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Backend não configurado (SUPABASE_JWT_SECRET vazio)",
-        )
+# Cache global do JWKS client (1 por processo)
+_jwks_client: PyJWKClient | None = None
 
+
+def _get_jwks_client() -> PyJWKClient:
+    global _jwks_client
+    if _jwks_client is None:
+        settings = get_settings()
+        if not settings.SUPABASE_URL:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="SUPABASE_URL não configurada",
+            )
+        jwks_url = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json"
+        logger.info("Inicializando JWKS client: %s", jwks_url)
+        _jwks_client = PyJWKClient(jwks_url, cache_keys=True, lifespan=3600)
+    return _jwks_client
+
+
+def _decode_token(token: str) -> dict:
+    """Decodifica + valida o JWT do Supabase.
+
+    Tenta HS256 com SUPABASE_JWT_SECRET primeiro (legado).
+    Se algoritmo não bater ou secret faltar, tenta JWKS (RS256/ES256).
+    """
+    settings = get_settings()
+
+    # ====== Tentativa 1: HS256 com secret simétrico ======
+    if settings.SUPABASE_JWT_SECRET:
+        try:
+            return jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated",
+            )
+        except jwt.InvalidAlgorithmError:
+            logger.debug("HS256 não é o alg do token — tentando JWKS")
+        except jwt.InvalidSignatureError:
+            logger.debug("Assinatura HS256 não bate — tentando JWKS")
+        except jwt.ExpiredSignatureError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Sessão expirada — entre novamente",
+            ) from e
+        except jwt.InvalidAudienceError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Audience inválida no token",
+            ) from e
+        except jwt.InvalidTokenError as e:
+            # Outros erros HS256 — pode ser que o token seja RS256
+            logger.debug("HS256 falhou (%s) — tentando JWKS", e)
+
+    # ====== Tentativa 2: JWKS (asymmetric keys) ======
     try:
-        payload = jwt.decode(
+        client = _get_jwks_client()
+        signing_key = client.get_signing_key_from_jwt(token).key
+        return jwt.decode(
             token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
+            signing_key,
+            algorithms=["RS256", "ES256"],
             audience="authenticated",
         )
-        return payload
     except jwt.ExpiredSignatureError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessão expirada — entre novamente",
         ) from e
     except jwt.InvalidTokenError as e:
-        logger.warning("JWT inválido: %s", e)
+        logger.warning("JWT inválido via JWKS: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido",
+        ) from e
+    except Exception as e:
+        logger.exception("Falha inesperada na validação JWT: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido",
