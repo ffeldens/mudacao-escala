@@ -12,13 +12,18 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function MinhaContaPage() {
+export default async function MinhaContaPage({
+  searchParams,
+}: {
+  searchParams: { checkout?: string };
+}) {
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login?reason=protected&redirect=/minha-conta");
   }
 
   const profile = await getUserProfile();
+  const checkoutResult = searchParams.checkout;
 
   return (
     <>
@@ -37,6 +42,28 @@ export default async function MinhaContaPage() {
               Logado como <strong>{user.email}</strong>
             </p>
           </div>
+
+          {/* Flash message pós-checkout */}
+          {checkoutResult === "success" && (
+            <div className="rounded-xl border-2 border-mudacao-700 bg-mudacao-50 p-5">
+              <p className="font-bold text-mudacao-900">
+                🎉 Bem-vindo ao Starter!
+              </p>
+              <p className="mt-1 text-sm text-mudacao-900">
+                Seu trial gratuito de 14 dias começou. Em até 1 minuto seu
+                plano vai aparecer atualizado abaixo. Se ainda mostrar "Free",
+                atualize a página.
+              </p>
+            </div>
+          )}
+          {checkoutResult === "canceled" && (
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <p className="text-sm text-slate-700">
+                Checkout cancelado — você continua no plano Free. Pode tentar
+                de novo quando quiser.
+              </p>
+            </div>
+          )}
 
           {/* Plano atual */}
           <PlanCard profile={profile} />

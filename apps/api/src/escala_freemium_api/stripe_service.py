@@ -186,3 +186,115 @@ def verify_webhook_signature(
         signature_header,
         settings.STRIPE_WEBHOOK_SECRET,
     )
+
+
+# =============================================================================
+# Sync Stripe → UserProfile
+# =============================================================================
+
+
+def _stripe_status_to_plan_tier(status: str | None) -> str:
+    """Mapeia status do Stripe pra plan_tier no nosso DB.
+
+    Stripe statuses: 'trialing', 'active', 'past_due', 'canceled', 'unpaid',
+    'incomplete', 'incomplete_expired', 'paused'.
+
+    A regra: durante trialing/active → "starter". Caso contrário → "free"
+    (perde acesso aos recursos pagos).
+    """
+    if status in ("trialing", "active", "past_due"):
+        # past_due ainda dá acesso por 1-2 ciclos enquanto tentamos cobrar
+        return "starter"
+    return "free"
+
+
+def sync_subscription_to_profile(
+    db: Session,
+    subscription: dict,
+) -> str | None:
+    """Atualiza o UserProfile baseado em um Subscription event do Stripe.
+
+    Args:
+        db: sessão SQLAlchemy
+        subscription: dict do Stripe Subscription (do event.data.object)
+
+    Returns:
+        user_id atualizado, ou None se não encontrou profile
+    """
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    customer_id = subscription.get("customer")
+    if not customer_id:
+        logger.warning("Subscription sem customer — ignorando")
+        return None
+
+    profile = (
+        db.query(UserProfile)
+        .filter(UserProfile.stripe_customer_id == customer_id)
+        .first()
+    )
+    if not profile:
+        logger.warning(
+            "Profile nao encontrado pra customer_id=%s (subscription=%s)",
+            customer_id, subscription.get("id"),
+        )
+        return None
+
+    status = subscription.get("status")
+    profile.stripe_subscription_id = subscription.get("id")
+    profile.subscription_status = status
+    profile.plan_tier = _stripe_status_to_plan_tier(status)
+
+    # Datas — Stripe envia timestamps unix
+    trial_end = subscription.get("trial_end")
+    period_end = subscription.get("current_period_end")
+
+    profile.trial_end_at = (
+        datetime.fromtimestamp(trial_end, tz=timezone.utc) if trial_end else None
+    )
+    profile.subscription_current_period_end = (
+        datetime.fromtimestamp(period_end, tz=timezone.utc) if period_end else None
+    )
+
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+
+    logger.info(
+        "Subscription sync: user=%s status=%s plan=%s sub=%s",
+        profile.id, status, profile.plan_tier, profile.stripe_subscription_id,
+    )
+
+    return str(profile.id)
+
+
+def handle_subscription_deleted(
+    db: Session,
+    subscription: dict,
+) -> str | None:
+    """Marca subscription como cancelada no profile."""
+    customer_id = subscription.get("customer")
+    if not customer_id:
+        return None
+
+    profile = (
+        db.query(UserProfile)
+        .filter(UserProfile.stripe_customer_id == customer_id)
+        .first()
+    )
+    if not profile:
+        return None
+
+    profile.subscription_status = "canceled"
+    profile.plan_tier = "free"
+    # Mantém stripe_subscription_id pra histórico
+
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+
+    logger.info(
+        "Subscription canceled: user=%s sub=%s",
+        profile.id, subscription.get("id"),
+    )
+    return str(profile.id)

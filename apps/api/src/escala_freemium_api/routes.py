@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from escala_freemium_api import __version__
@@ -31,7 +31,12 @@ from escala_freemium_api.schemas import (
     WaitlistResponse,
 )
 from escala_freemium_api.simulation_adapter import run_simulation
-from escala_freemium_api.stripe_service import create_checkout_session
+from escala_freemium_api.stripe_service import (
+    create_checkout_session,
+    handle_subscription_deleted,
+    sync_subscription_to_profile,
+    verify_webhook_signature,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -318,6 +323,85 @@ async def stripe_checkout(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
     return CheckoutSessionResponse(**result)
+
+
+# =============================================================================
+# Stripe — Webhook
+# =============================================================================
+
+
+@router.post("/stripe/webhook", tags=["billing"], include_in_schema=False)
+async def stripe_webhook(
+    request: Request,
+    db: DbSession,
+    stripe_signature: str | None = Header(default=None),
+) -> dict:
+    """Recebe eventos do Stripe e sincroniza com user_profiles.
+
+    O endpoint é público (sem auth de user) mas valida a assinatura HMAC
+    via STRIPE_WEBHOOK_SECRET pra garantir que veio do Stripe mesmo.
+
+    Eventos tratados:
+    - checkout.session.completed: confirma fim do checkout
+    - customer.subscription.created/updated: sync de status + plan_tier
+    - customer.subscription.deleted: marca como canceled
+    - invoice.payment_failed: loga warning (sub atualiza via subscription.updated)
+    """
+    if not stripe_signature:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing stripe-signature header",
+        )
+
+    payload = await request.body()
+
+    try:
+        event = verify_webhook_signature(payload, stripe_signature)
+    except Exception as e:
+        logger.exception("Webhook signature inválida: %s", e)
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid webhook signature",
+        ) from e
+
+    event_type = event["type"]
+    obj = event["data"]["object"]
+
+    logger.info("Stripe webhook recebido: %s (id=%s)", event_type, event["id"])
+
+    if event_type == "checkout.session.completed":
+        # Sessão concluída — a subscription já foi criada pelo Stripe
+        # e o customer.subscription.created vem em seguida. Não precisamos
+        # fazer nada aqui exceto logar.
+        logger.info(
+            "Checkout completed: customer=%s subscription=%s",
+            obj.get("customer"), obj.get("subscription"),
+        )
+
+    elif event_type in (
+        "customer.subscription.created",
+        "customer.subscription.updated",
+        "customer.subscription.trial_will_end",
+    ):
+        sync_subscription_to_profile(db, obj)
+
+    elif event_type == "customer.subscription.deleted":
+        handle_subscription_deleted(db, obj)
+
+    elif event_type == "invoice.payment_failed":
+        # Cartão recusado — o status da subscription vira past_due automático
+        # e o customer.subscription.updated trata. Aqui só loga + (futuro)
+        # manda email pro user reativar.
+        logger.warning(
+            "Payment failed: customer=%s invoice=%s",
+            obj.get("customer"), obj.get("id"),
+        )
+
+    else:
+        # Outros eventos (charge.*, payment_intent.*) — ignoramos no MVP
+        logger.debug("Evento ignorado: %s", event_type)
+
+    return {"received": True, "event_type": event_type}
 
 
 # =============================================================================
