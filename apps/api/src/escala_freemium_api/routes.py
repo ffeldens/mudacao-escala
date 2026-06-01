@@ -7,6 +7,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from fastapi.responses import Response
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from escala_freemium_api.email_sender import (
     send_starter_welcome_email,
     send_waitlist_admin_notification,
 )
+from escala_freemium_api.clt_validator_pdf import render_clt_validator_pdf
 from escala_freemium_api.pdf import render_simulation_pdf
 from escala_freemium_api.schemas import (
     CheckoutSessionRequest,
@@ -259,6 +261,85 @@ async def list_my_simulations(
         )
 
     return SimulationHistoryResponse(items=items, total=total)
+
+
+@router.post(
+    "/me/validate-clt",
+    tags=["simulator"],
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "PDF do validador CLT",
+        },
+    },
+)
+async def validate_clt(
+    req: SimulateRequest,
+    user: CurrentUser,
+    db: DbSession,
+) -> Response:
+    """Roda a simulação + valida riscos CLT + retorna PDF auditável.
+
+    Paywalled Starter+. PDF inclui hash de inputs + clt_version pra
+    reprodutibilidade jurídica.
+    """
+    profile = _require_paid_plan(user, db)
+
+    # Premissas customizadas (igual ao /simulate)
+    custom_financial = None
+    if profile.plan_tier in _PAID_PLANS:
+        custom_financial = _build_custom_financial(profile)
+
+    try:
+        result = run_simulation(req, custom_financial=custom_financial)
+    except Exception as e:
+        logger.exception("Falha simulação no validador CLT")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # Riscos CLT já vêm dentro do engine output (SimulationOutput.riscos_clt).
+    # SimulateResponse simplificado não expõe — pegamos via dict do engine.
+    # Pra render_clt_validator_pdf, anexamos _clt_risks como atributo ad-hoc.
+    engine_output_dict = result.model_dump(mode="json")
+    risks_raw = engine_output_dict.get("riscos_clt") or []
+
+    # Se vazio, rodamos o engine de novo só pra extrair riscos (porque o
+    # SimulateResponse simplificado não tem riscos diretamente — só headline).
+    # Mais robusto: re-rodar engine.simulate e pegar output completo.
+    if not risks_raw:
+        from engine.core import simulate as engine_simulate  # noqa: PLC0415
+        from escala_freemium_api.simulation_adapter import (
+            _build_engine_input,  # noqa: PLC0415
+        )
+
+        engine_input = _build_engine_input(req, custom_financial=custom_financial)
+        engine_out = engine_simulate(engine_input)
+        risks_raw = [r.model_dump(mode="json") for r in engine_out.riscos_clt]
+
+    # Anexa como atributo dinâmico pra o PDF renderer ler
+    result._clt_risks = risks_raw  # type: ignore[attr-defined]
+
+    pdf_bytes = render_clt_validator_pdf(
+        req=req,
+        result=result,
+        user_email=profile.email,
+        user_nome=profile.nome,
+        user_empresa=profile.empresa,
+    )
+
+    if pdf_bytes is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Falha ao gerar PDF — WeasyPrint pode estar indisponível",
+        )
+
+    filename = f"validador-clt-{result.inputs_hash}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
 
 
 @router.get(
