@@ -129,6 +129,21 @@ class UserProfile(Base):
     # Flag "cancelamento agendado pro fim do período" — quando true,
     # user continua com acesso até subscription_current_period_end
     cancel_at_period_end: Mapped[bool] = mapped_column(default=False)
+
+    # Premissas customizadas (None = usa defaults do engine)
+    # Aplicadas automaticamente nas simulações do user logado.
+    pref_encargos_pct: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 4), nullable=True
+    )
+    pref_vr_dia: Mapped[Decimal | None] = mapped_column(
+        Numeric(8, 2), nullable=True
+    )
+    pref_vt_dia: Mapped[Decimal | None] = mapped_column(
+        Numeric(8, 2), nullable=True
+    )
+    pref_dias_uteis_mes: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

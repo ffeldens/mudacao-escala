@@ -122,6 +122,23 @@ export default async function MinhaContaPage({
                   )}
                 </div>
               </li>
+              <li className="flex items-start gap-2">
+                <span className="font-semibold text-mudacao-700">▸</span>
+                <div>
+                  <Link
+                    href="/minha-conta/premissas"
+                    className="font-semibold text-mudacao-700 hover:underline"
+                  >
+                    Configurar premissas
+                  </Link>{" "}
+                  — encargos, VR/VT e dias úteis da sua empresa{" "}
+                  {profile?.plan_tier === "free" && (
+                    <span className="text-xs text-slate-500">
+                      (recurso Starter)
+                    </span>
+                  )}
+                </div>
+              </li>
               {profile?.plan_tier === "free" && (
                 <li className="flex items-start gap-2">
                   <span className="font-semibold text-mudacao-700">▸</span>

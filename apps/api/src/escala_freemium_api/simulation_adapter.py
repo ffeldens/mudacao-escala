@@ -34,10 +34,20 @@ _PORTE_TO_CLUSTER = {"PP": "PP", "P": "P", "M": "M", "G": "G"}
 WFM_ECONOMY_PCT = Decimal("0.05")
 
 
-def run_simulation(req: SimulateRequest) -> SimulateResponse:
-    """Roda o engine `simulate()` e empacota a resposta simplificada."""
+def run_simulation(
+    req: SimulateRequest,
+    custom_financial: FinancialAssumptions | None = None,
+) -> SimulateResponse:
+    """Roda o engine `simulate()` e empacota a resposta simplificada.
+
+    Args:
+        req: payload da API
+        custom_financial: se fornecido, substitui defaults do engine
+            (encargos, VR, VT, dias úteis). Usado pra premissas
+            customizadas de user logado.
+    """
     # Constrói input completo pro engine
-    engine_input = _build_engine_input(req)
+    engine_input = _build_engine_input(req, custom_financial=custom_financial)
 
     # Roda engine
     output: SimulationOutput = engine_simulate(engine_input)
@@ -96,7 +106,10 @@ def run_simulation(req: SimulateRequest) -> SimulateResponse:
 # =============================================================================
 
 
-def _build_engine_input(req: SimulateRequest) -> SimulationInput:
+def _build_engine_input(
+    req: SimulateRequest,
+    custom_financial: FinancialAssumptions | None = None,
+) -> SimulationInput:
     """Expande payload simplificado pra SimulationInput completo."""
     # 1 função "Equipe" agregando todos os FTEs.
     # Quando o frontend evoluir pra granular (vendedor/caixa/estoque), aqui
@@ -130,7 +143,7 @@ def _build_engine_input(req: SimulateRequest) -> SimulationInput:
         manter_salario_nominal=req.manter_salario_nominal,
     )
 
-    financial = FinancialAssumptions()  # usa defaults (encargos ~70%)
+    financial = custom_financial or FinancialAssumptions()
 
     return SimulationInput(
         store=store,

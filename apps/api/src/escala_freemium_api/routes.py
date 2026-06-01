@@ -90,10 +90,18 @@ async def simulate(
     """Roda a simulação e persiste o resultado.
 
     Se Authorization header presente com JWT válido, associa ao user.
-    Senão, simulação fica anônima (acessível via /lead-and-simulate).
+    Pra user Starter+, aplica premissas customizadas do profile
+    (encargos, VR/VT, dias úteis).
     """
+    # Premissas customizadas pra user pago
+    custom_financial = None
+    if user:
+        profile = db.get(UserProfile, UUID(user.id))
+        if profile and profile.plan_tier in _PAID_PLANS:
+            custom_financial = _build_custom_financial(profile)
+
     try:
-        result = run_simulation(req)
+        result = run_simulation(req, custom_financial=custom_financial)
     except Exception as e:
         logger.exception("Falha na simulação")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -112,6 +120,31 @@ async def simulate(
     db.commit()
 
     return result
+
+
+def _build_custom_financial(profile: UserProfile):
+    """Constrói FinancialAssumptions a partir das premissas do profile.
+
+    Campos None ficam com default do engine. Só sobrescreve os que
+    foram explicitamente setados pelo user.
+    """
+    from engine.models import FinancialAssumptions  # noqa: PLC0415
+
+    defaults = FinancialAssumptions()
+    return FinancialAssumptions(
+        encargos_pct=profile.pref_encargos_pct
+        if profile.pref_encargos_pct is not None
+        else defaults.encargos_pct,
+        vr_dia=profile.pref_vr_dia
+        if profile.pref_vr_dia is not None
+        else defaults.vr_dia,
+        vt_dia=profile.pref_vt_dia
+        if profile.pref_vt_dia is not None
+        else defaults.vt_dia,
+        dias_uteis_mes=profile.pref_dias_uteis_mes
+        if profile.pref_dias_uteis_mes is not None
+        else defaults.dias_uteis_mes,
+    )
 
 
 # =============================================================================

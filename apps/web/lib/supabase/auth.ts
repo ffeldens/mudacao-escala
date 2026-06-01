@@ -27,6 +27,11 @@ export interface UserProfile {
   trial_end_at: string | null;
   subscription_current_period_end: string | null;
   cancel_at_period_end: boolean;
+  // Premissas customizadas (Starter+) — null = usa default do engine
+  pref_encargos_pct: string | null;
+  pref_vr_dia: string | null;
+  pref_vt_dia: string | null;
+  pref_dias_uteis_mes: number | null;
   created_at: string;
   updated_at: string;
 }
