@@ -15,6 +15,7 @@ from escala_freemium_api.db import Lead, Simulation, UserProfile, get_db
 from escala_freemium_api.email_sender import (
     send_admin_notification,
     send_lead_welcome_email,
+    send_starter_welcome_email,
     send_waitlist_admin_notification,
 )
 from escala_freemium_api.pdf import render_simulation_pdf
@@ -179,6 +180,23 @@ async def waitlist_signup(
     )
 
     return WaitlistResponse(lead_id=str(lead.id), email=lead.email)
+
+
+async def _send_starter_welcome_safe(
+    *,
+    to: str,
+    nome: str | None,
+    trial_end_at: str | None,
+) -> None:
+    """Tenta enviar welcome do Starter. Loga erro mas nunca propaga."""
+    try:
+        await send_starter_welcome_email(
+            to=to,
+            nome=nome,
+            trial_end_at=trial_end_at,
+        )
+    except Exception:
+        logger.exception("Falha starter welcome pra %s", to)
 
 
 async def _send_waitlist_notification_safe(
@@ -385,6 +403,7 @@ async def stripe_portal(
 @router.post("/stripe/webhook", tags=["billing"], include_in_schema=False)
 async def stripe_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: DbSession,
     stripe_signature: str | None = Header(default=None),
 ) -> dict:
@@ -436,6 +455,30 @@ async def stripe_webhook(
         "customer.subscription.trial_will_end",
     ):
         sync_subscription_to_profile(db, obj)
+
+        # No created: dispara welcome do Starter em background.
+        # Disparar só uma vez (na criação), não em updated. Reactivations
+        # vêm como .updated, então não duplicamos email.
+        if event_type == "customer.subscription.created":
+            customer_id = obj.get("customer")
+            if customer_id:
+                profile = (
+                    db.query(UserProfile)
+                    .filter(UserProfile.stripe_customer_id == customer_id)
+                    .first()
+                )
+                if profile:
+                    trial_end_str = (
+                        profile.trial_end_at.strftime("%d/%m/%Y")
+                        if profile.trial_end_at
+                        else None
+                    )
+                    background_tasks.add_task(
+                        _send_starter_welcome_safe,
+                        to=profile.email,
+                        nome=profile.nome,
+                        trial_end_at=trial_end_str,
+                    )
 
     elif event_type == "customer.subscription.deleted":
         handle_subscription_deleted(db, obj)

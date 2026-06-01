@@ -137,6 +137,208 @@ def _only_digits(s: str) -> str:
     return "".join(c for c in s if c.isdigit())
 
 
+async def send_starter_welcome_email(
+    *,
+    to: str,
+    nome: str | None,
+    trial_end_at: str | None = None,
+) -> bool:
+    """Email de boas-vindas ao Starter — disparado ao iniciar trial.
+
+    Args:
+        to: email do user
+        nome: primeiro nome do user (opcional)
+        trial_end_at: data de término do trial formatada DD/MM/YYYY
+    """
+    settings = get_settings()
+
+    if not settings.RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY vazia — pulando welcome Starter")
+        return False
+
+    nome_saudacao = nome.split()[0] if nome else "Olá"
+    trial_msg = (
+        f"Seu trial gratuito vai até <strong>{trial_end_at}</strong>. "
+        if trial_end_at
+        else "Seu trial gratuito de 14 dias começou. "
+    )
+
+    html = f"""\
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bem-vindo ao MudAção Escala — Starter</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f7f6;
+             font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+             color:#1a1a1a;line-height:1.6;">
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+         style="background:#f5f7f6;padding:32px 16px;">
+    <tr><td align="center">
+
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+             style="max-width:600px;background:#ffffff;border-radius:12px;
+                    overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+
+        <!-- Header verde -->
+        <tr><td style="background:linear-gradient(135deg,#062920 0%,#0a4a3a 100%);
+                       padding:32px 32px 28px;color:#ffffff;">
+          <p style="margin:0;font-size:13px;letter-spacing:1.5px;
+                    text-transform:uppercase;color:#b8dcc8;font-weight:600;">
+            🎉 MudAção Escala — Starter
+          </p>
+          <h1 style="margin:8px 0 0;font-size:26px;font-weight:700;line-height:1.2;">
+            {nome_saudacao}, bem-vindo ao Starter!
+          </h1>
+        </td></tr>
+
+        <!-- Body -->
+        <tr><td style="padding:32px;">
+
+          <p style="margin:0 0 20px;font-size:15px;color:#475569;">
+            {trial_msg}Aproveite pra explorar tudo que está disponível agora
+            que você é um usuário Starter:
+          </p>
+
+          <!-- Lista de features -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                 border="0" style="margin:0 0 24px;">
+            <tr><td style="padding:12px 0;border-bottom:1px solid #e2e8f0;">
+              <strong style="color:#0a4a3a;">✓ Histórico de simulações</strong><br>
+              <span style="color:#64748b;font-size:13px;">
+                Revisite, refaça e compare todas as suas simulações anteriores.
+              </span>
+            </td></tr>
+            <tr><td style="padding:12px 0;border-bottom:1px solid #e2e8f0;">
+              <strong style="color:#0a4a3a;">✓ Premissas customizadas</strong><br>
+              <span style="color:#64748b;font-size:13px;">
+                Configure encargos, VR/VT e dias úteis específicos da sua empresa.
+              </span>
+            </td></tr>
+            <tr><td style="padding:12px 0;border-bottom:1px solid #e2e8f0;">
+              <strong style="color:#0a4a3a;">✓ Validador CLT em PDF</strong><br>
+              <span style="color:#64748b;font-size:13px;">
+                Relatório com hash de auditoria pros artigos 71, 66, 67 e mais.
+              </span>
+            </td></tr>
+            <tr><td style="padding:12px 0;border-bottom:1px solid #e2e8f0;">
+              <strong style="color:#0a4a3a;">✓ Comparativo entre cenários</strong><br>
+              <span style="color:#64748b;font-size:13px;">
+                Compare 2 ou 3 cenários salvos lado a lado.
+              </span>
+            </td></tr>
+            <tr><td style="padding:12px 0;">
+              <strong style="color:#0a4a3a;">✓ Export Excel + Suporte WhatsApp</strong><br>
+              <span style="color:#64748b;font-size:13px;">
+                Planilha estruturada pra levar pra reunião. Suporte direto comigo.
+              </span>
+            </td></tr>
+          </table>
+
+          <!-- CTA -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                 border="0" style="margin:0 0 24px;">
+            <tr><td align="center">
+              <a href="https://simulaescala.mudacao.com.br/minha-conta"
+                 style="display:inline-block;background:#0a4a3a;color:#ffffff;
+                        text-decoration:none;padding:14px 28px;border-radius:8px;
+                        font-weight:600;font-size:15px;">
+                Ir pra minha conta →
+              </a>
+            </td></tr>
+          </table>
+
+          <!-- Mensagem pessoal -->
+          <div style="background:#f5f7f6;padding:16px 20px;border-radius:8px;
+                      border-left:4px solid #0a4a3a;">
+            <p style="margin:0;font-size:14px;color:#475569;">
+              Quero te ouvir — qual o maior problema que o Starter precisa
+              resolver pra você?<br>
+              <a href="mailto:felipe@feldens.com?subject=Feedback%20Starter"
+                 style="color:#0a4a3a;font-weight:600;">
+                Manda um email
+              </a>
+              {" "}ou
+              <a href="https://wa.me/5511996325174?text=Acabei%20de%20assinar%20o%20Starter%21%20Quero%20conversar%3A"
+                 style="color:#0a4a3a;font-weight:600;">
+                chama no WhatsApp
+              </a>
+              {" "}— respondo pessoalmente.
+            </p>
+          </div>
+
+          <p style="margin:24px 0 0;font-size:12px;color:#94a3b8;
+                    border-top:1px solid #e2e8f0;padding-top:16px;">
+            Não vai cobrar nada agora. Quando o trial terminar, R$ 99/mês no
+            cartão. Cancele a qualquer momento em
+            <a href="https://simulaescala.mudacao.com.br/minha-conta"
+               style="color:#64748b;text-decoration:underline;">
+              Minha conta
+            </a>.
+          </p>
+
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="background:#f5f7f6;padding:20px 32px;
+                       border-top:1px solid #e2e8f0;">
+          <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center;">
+            <strong style="color:#0a4a3a;">MudAção Escala</strong> ·
+            Felipe Feldens<br>
+            <a href="https://simulaescala.mudacao.com.br" style="color:#64748b;">
+              simulaescala.mudacao.com.br
+            </a>
+            ·
+            <a href="mailto:felipe@feldens.com" style="color:#64748b;">
+              felipe@feldens.com
+            </a>
+          </p>
+        </td></tr>
+
+      </table>
+
+    </td></tr>
+  </table>
+</body>
+</html>
+"""
+
+    payload = {
+        "from": f"MudAção Escala <{settings.RESEND_FROM_EMAIL}>",
+        "to": [to],
+        "reply_to": settings.RESEND_REPLY_TO,
+        "subject": f"🎉 {nome_saudacao}, bem-vindo ao Starter (trial 14 dias)",
+        "html": html,
+        "tags": [
+            {"name": "category", "value": "starter_welcome"},
+            {"name": "env", "value": settings.APP_ENV},
+        ],
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                RESEND_API_URL,
+                headers={
+                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            if r.status_code >= 400:
+                logger.error("Resend starter welcome retornou %s: %s",
+                             r.status_code, r.text)
+                return False
+            logger.info("Starter welcome enviado pra %s", to)
+            return True
+    except httpx.HTTPError as e:
+        logger.exception("Falha starter welcome: %s", e)
+        return False
+
+
 async def send_waitlist_admin_notification(
     *,
     nome: str,
