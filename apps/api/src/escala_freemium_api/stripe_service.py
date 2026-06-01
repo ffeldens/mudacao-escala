@@ -284,6 +284,9 @@ def sync_subscription_to_profile(
     profile.stripe_subscription_id = subscription.get("id")
     profile.subscription_status = status
     profile.plan_tier = _stripe_status_to_plan_tier(status)
+    profile.cancel_at_period_end = bool(
+        subscription.get("cancel_at_period_end", False)
+    )
 
     # Datas — Stripe envia timestamps unix
     trial_end = subscription.get("trial_end")

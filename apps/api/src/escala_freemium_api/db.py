@@ -126,6 +126,9 @@ class UserProfile(Base):
     subscription_current_period_end: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
+    # Flag "cancelamento agendado pro fim do período" — quando true,
+    # user continua com acesso até subscription_current_period_end
+    cancel_at_period_end: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

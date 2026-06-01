@@ -29,6 +29,7 @@ export function PlanCard({ profile }: PlanCardProps) {
   const isActive = status === "active";
   const isPastDue = status === "past_due";
   const isCanceled = status === "canceled";
+  const cancelScheduled = profile?.cancel_at_period_end === true;
 
   const trialEndsAt = profile?.trial_end_at
     ? new Date(profile.trial_end_at)
@@ -61,17 +62,28 @@ export function PlanCard({ profile }: PlanCardProps) {
             </span>
           </h2>
 
-          {isTrialing && trialEndsAt && (
+          {isTrialing && trialEndsAt && !cancelScheduled && (
             <p className={`mt-2 text-sm ${accentText}`}>
               ⏳ Trial gratuito até{" "}
               <strong>{trialEndsAt.toLocaleDateString("pt-BR")}</strong>
             </p>
           )}
-          {isActive && periodEndsAt && (
+          {isActive && periodEndsAt && !cancelScheduled && (
             <p className={`mt-2 text-sm ${accentText}`}>
               ✓ Próxima cobrança em{" "}
               <strong>{periodEndsAt.toLocaleDateString("pt-BR")}</strong>
             </p>
+          )}
+          {cancelScheduled && (
+            <div className="mt-3 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-900">
+              <strong>⚠️ Cancelamento agendado</strong>
+              <br />
+              Seu acesso continua até{" "}
+              <strong>
+                {(periodEndsAt ?? trialEndsAt)?.toLocaleDateString("pt-BR") ?? "—"}
+              </strong>
+              . Depois o plano vira Free.
+            </div>
           )}
           {isPastDue && (
             <p className="mt-2 rounded-lg bg-red-100 px-3 py-2 text-sm text-red-900">
