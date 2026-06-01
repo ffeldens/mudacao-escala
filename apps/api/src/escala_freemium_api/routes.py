@@ -24,6 +24,7 @@ from escala_freemium_api.schemas import (
     HealthResponse,
     LeadRequest,
     LeadResponse,
+    PortalSessionResponse,
     SimulateRequest,
     SimulateResponse,
     VersionResponse,
@@ -33,6 +34,7 @@ from escala_freemium_api.schemas import (
 from escala_freemium_api.simulation_adapter import run_simulation
 from escala_freemium_api.stripe_service import (
     create_checkout_session,
+    create_portal_session,
     handle_subscription_deleted,
     sync_subscription_to_profile,
     verify_webhook_signature,
@@ -323,6 +325,56 @@ async def stripe_checkout(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
     return CheckoutSessionResponse(**result)
+
+
+# =============================================================================
+# Stripe — Customer Portal (gerenciar assinatura)
+# =============================================================================
+
+
+@router.post(
+    "/stripe/portal-session",
+    response_model=PortalSessionResponse,
+    tags=["billing"],
+)
+async def stripe_portal(
+    user: CurrentUser,
+    db: DbSession,
+) -> PortalSessionResponse:
+    """Cria URL do Stripe Customer Portal pra user gerenciar assinatura.
+
+    No portal o user pode:
+    - Trocar cartão
+    - Cancelar / reativar assinatura
+    - Baixar invoices
+    - Atualizar endereço de cobrança
+
+    Requer Authorization: Bearer <jwt do Supabase>.
+    """
+    profile = db.get(UserProfile, user.id)
+    if not profile:
+        raise HTTPException(
+            status_code=404,
+            detail="Perfil não encontrado",
+        )
+
+    if not profile.stripe_customer_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Você ainda não tem assinatura — assine um plano primeiro",
+        )
+
+    settings = get_settings()
+    return_url = f"{settings.APP_BASE_URL.rstrip('/')}/minha-conta"
+
+    try:
+        result = create_portal_session(profile=profile, return_url=return_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return PortalSessionResponse(**result)
 
 
 # =============================================================================

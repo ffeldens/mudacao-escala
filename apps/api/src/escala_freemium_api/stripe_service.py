@@ -166,6 +166,46 @@ def create_checkout_session(
     }
 
 
+def create_portal_session(
+    profile: UserProfile,
+    return_url: str,
+) -> dict[str, str]:
+    """Cria uma Stripe Billing Portal Session.
+
+    O Customer Portal é uma página hospedada pelo Stripe onde o user
+    pode: trocar cartão, cancelar assinatura, ver invoices, atualizar
+    endereço de cobrança. Não precisamos construir nada — só fornecer
+    a URL.
+
+    Args:
+        profile: UserProfile com stripe_customer_id válido
+        return_url: URL pra onde o Stripe redireciona ao sair do portal
+
+    Returns:
+        dict com 'url' (URL hospedada do portal)
+    """
+    _ensure_stripe_configured()
+
+    if not profile.stripe_customer_id:
+        raise ValueError(
+            "Usuário ainda não tem stripe_customer_id "
+            "(nunca passou por checkout)"
+        )
+
+    session = stripe.billing_portal.Session.create(
+        customer=profile.stripe_customer_id,
+        return_url=return_url,
+        locale="pt-BR",
+    )
+
+    logger.info(
+        "Portal session criado: %s (customer=%s)",
+        session.id, profile.stripe_customer_id,
+    )
+
+    return {"url": session.url}
+
+
 def verify_webhook_signature(
     payload: bytes,
     signature_header: str,

@@ -164,10 +164,20 @@ class CheckoutSessionRequest(BaseModel):
     plano: Literal["starter"] = "starter"
 
 
+# Sem body — basta o JWT pro user
+# (deixei como classe vazia pra consistência se quiser passar opções no futuro)
+
+
 class CheckoutSessionResponse(BaseModel):
     """Resposta com URL do Stripe Checkout pra redirecionamento."""
 
     session_id: str
+    url: str
+
+
+class PortalSessionResponse(BaseModel):
+    """Resposta com URL do Stripe Customer Portal pra redirecionamento."""
+
     url: str
 
 

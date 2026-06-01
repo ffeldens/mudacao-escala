@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Crown, Sparkles, ArrowRight } from "lucide-react";
 import type { UserProfile } from "@/lib/supabase/auth";
+import { ManageSubscriptionButton } from "./ManageSubscriptionButton";
 
 const PLAN_LABELS = {
   free: "Free",
@@ -103,14 +104,7 @@ export function PlanCard({ profile }: PlanCardProps) {
             <ArrowRight className="h-4 w-4" />
           </Link>
         ) : (
-          <button
-            type="button"
-            disabled
-            title="Disponível em breve (Stripe portal)"
-            className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-white/20 px-5 py-2.5 text-sm font-semibold text-white opacity-60"
-          >
-            Gerenciar assinatura
-          </button>
+          <ManageSubscriptionButton />
         )}
       </div>
     </section>
