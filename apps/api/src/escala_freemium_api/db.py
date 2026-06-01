@@ -134,7 +134,7 @@ class UserProfile(Base):
 
 
 class Simulation(Base):
-    """Cada simulação rodada (com ou sem lead)."""
+    """Cada simulação rodada (com ou sem lead, com ou sem user logado)."""
 
     __tablename__ = "simulations"
 
@@ -143,12 +143,21 @@ class Simulation(Base):
         primary_key=True,
         default=uuid4,
     )
+    # User logado que rodou (None = anônimo). FK pra auth.users.id
+    # via SQL — não declaramos FK em SQLAlchemy pra evitar cross-schema FK.
+    user_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=True,
+        index=True,
+    )
     lead_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("leads.id"),
         nullable=True,
         index=True,
     )
+    # Label opcional pra user identificar a simulação no histórico
+    nome_loja: Mapped[str | None] = mapped_column(String(120), nullable=True)
     inputs_hash: Mapped[str] = mapped_column(String(64), index=True)
     inputs: Mapped[dict] = mapped_column(JSON)
     outputs: Mapped[dict] = mapped_column(JSON)

@@ -105,6 +105,23 @@ export default async function MinhaContaPage({
                   — todos os planos têm acesso ao simulador grátis.
                 </div>
               </li>
+              <li className="flex items-start gap-2">
+                <span className="font-semibold text-mudacao-700">▸</span>
+                <div>
+                  <Link
+                    href="/minha-conta/historico"
+                    className="font-semibold text-mudacao-700 hover:underline"
+                  >
+                    Ver histórico de simulações
+                  </Link>{" "}
+                  — todas as análises que você rodou{" "}
+                  {profile?.plan_tier === "free" && (
+                    <span className="text-xs text-slate-500">
+                      (recurso Starter)
+                    </span>
+                  )}
+                </div>
+              </li>
               {profile?.plan_tier === "free" && (
                 <li className="flex items-start gap-2">
                   <span className="font-semibold text-mudacao-700">▸</span>

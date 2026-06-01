@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -10,10 +11,13 @@ import {
   Lightbulb,
   Share2,
   Download,
+  Loader2,
 } from "lucide-react";
 
 import type { SimulateResponse } from "@/lib/api";
+import { getMySimulation } from "@/lib/api";
 import { brl } from "@/lib/utils";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ScenarioChart } from "@/components/charts/ScenarioChart";
 import { NetworkImpactCard } from "@/components/charts/NetworkImpactCard";
 import { FteBreakdown } from "@/components/charts/FteBreakdown";
@@ -24,18 +28,52 @@ type StoredResult = SimulateResponse & {
 };
 
 export function ResultadoView() {
+  const searchParams = useSearchParams();
+  const simId = searchParams.get("id");
+
   const [data, setData] = useState<StoredResult | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem("mudacao_simulacao_resultado");
-      if (raw) setData(JSON.parse(raw));
-    } catch {
-      // ignora
+    let canceled = false;
+
+    async function load() {
+      // Cenário 1: ?id=... → carrega do backend (histórico)
+      if (simId) {
+        try {
+          const supabase = createSupabaseBrowserClient();
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (!session) {
+            setLoading(false);
+            return;
+          }
+          const result = await getMySimulation(session.access_token, simId);
+          if (!canceled) setData(result);
+        } catch {
+          // ignora — exibe estado vazio
+        } finally {
+          if (!canceled) setLoading(false);
+        }
+        return;
+      }
+
+      // Cenário 2: sem id → tenta sessionStorage (fluxo direto pós-form)
+      try {
+        const raw = sessionStorage.getItem("mudacao_simulacao_resultado");
+        if (raw && !canceled) setData(JSON.parse(raw));
+      } catch {
+        // ignora
+      }
+      if (!canceled) setLoading(false);
     }
-    setLoading(false);
-  }, []);
+    load();
+
+    return () => {
+      canceled = true;
+    };
+  }, [simId]);
 
   if (loading) {
     return (

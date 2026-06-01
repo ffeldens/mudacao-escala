@@ -120,10 +120,8 @@ def _decode_token(token: str) -> dict:
         ) from e
 
 
-async def get_current_user(
-    authorization: Annotated[str | None, Header()] = None,
-) -> AuthenticatedUser:
-    """Extrai e valida o user do header Authorization: Bearer <token>."""
+def _parse_bearer(authorization: str | None) -> AuthenticatedUser:
+    """Comum entre get_current_user e get_optional_user."""
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -152,4 +150,30 @@ async def get_current_user(
     return AuthenticatedUser(id=user_id, email=email)
 
 
+async def get_current_user(
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthenticatedUser:
+    """Dependency obrigatória — 401 se não tem token válido."""
+    return _parse_bearer(authorization)
+
+
+async def get_optional_user(
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthenticatedUser | None:
+    """Dependency opcional — retorna None se não tem token (sem 401).
+
+    Usar em endpoints que funcionam pra anônimos mas tem comportamento
+    extra pra logados (ex: /simulate salva user_id se autenticado).
+    """
+    if not authorization:
+        return None
+    try:
+        return _parse_bearer(authorization)
+    except HTTPException:
+        # Token presente mas inválido — tratamos como anônimo (não 401).
+        # Frontend lida com refresh do token separadamente.
+        return None
+
+
 CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]
+OptionalUser = Annotated["AuthenticatedUser | None", Depends(get_optional_user)]

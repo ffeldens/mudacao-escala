@@ -182,6 +182,28 @@ class PortalSessionResponse(BaseModel):
 
 
 # =============================================================================
+# Histórico de simulações
+# =============================================================================
+
+
+class SimulationHistoryItem(BaseModel):
+    """Item de lista do histórico — versão enxuta pra performance."""
+
+    id: str
+    nome_loja: str | None
+    n_lojas: int
+    delta_folha_pct: Decimal | None
+    economia_estimada_mes: Decimal | None
+    headline: str | None
+    created_at: str  # ISO
+
+
+class SimulationHistoryResponse(BaseModel):
+    items: list[SimulationHistoryItem]
+    total: int
+
+
+# =============================================================================
 # Health/version
 # =============================================================================
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { sendGAEvent } from "@next/third-parties/google";
 import {
@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  CheckCircle2,
 } from "lucide-react";
 import { z } from "zod";
 
@@ -23,6 +24,7 @@ import {
   type LeadFormData,
 } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type FormErrors<T> = Partial<Record<keyof T, string>>;
 
@@ -78,8 +80,25 @@ export function SimulatorForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const step2Ref = useRef<HTMLFormElement>(null);
 
-  // ============ Step 1 → Step 2 ============
-  function handleSimSubmit(e: React.FormEvent) {
+  // Se logado, pulamos o gate. Carregamos session no mount.
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      setAccessToken(session?.access_token ?? null);
+      setAuthChecked(true);
+    })();
+  }, []);
+
+  const isLogged = !!accessToken;
+
+  // ============ Step 1 → Step 2 (ou pula direto se logado) ============
+  async function handleSimSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitError(null);
 
@@ -97,7 +116,6 @@ export function SimulatorForm() {
       return;
     }
     setSimErrors({});
-    setStep(2);
 
     // GA4: usuário completou step 1 (interesse alto, antes do gate)
     sendGAEvent("event", "simulator_step1_complete", {
@@ -107,10 +125,64 @@ export function SimulatorForm() {
       cenario: parsed.cenario,
     });
 
-    // Scroll suave pro step 2
+    // Se logado: pula gate, chama /api/simulate direto com Bearer
+    // (salva user_id no DB pra histórico)
+    if (isLogged && accessToken) {
+      await submitLoggedSimulation(result.data as SimulationFormData);
+      return;
+    }
+
+    // Anônimo: vai pro step 2 (gate de captura)
+    setStep(2);
     setTimeout(() => {
       step2Ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
+  }
+
+  // ============ Submit direto pra user logado ============
+  async function submitLoggedSimulation(data: SimulationFormData) {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const payload = buildApiPayload(data, {
+        nome: "",
+        email: "logged@user.placeholder",
+        email_confirm: "logged@user.placeholder",
+        whatsapp: "",
+        empresa: "",
+        aceite_lgpd: true as const,
+      });
+      const res = await fetch("/api/simulate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload.sim_req),
+      });
+      if (!res.ok) {
+        const errBody = await res.text();
+        throw new Error(`Erro ${res.status}: ${errBody.slice(0, 200)}`);
+      }
+      const result = await res.json();
+
+      sessionStorage.setItem(
+        "mudacao_simulacao_resultado",
+        JSON.stringify(result),
+      );
+
+      sendGAEvent("event", "logged_simulation", {
+        value: 1,
+        porte: data.porte,
+        setor: data.setor,
+      });
+
+      router.push("/simulador/resultado");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSubmitError(`Falha ao calcular: ${msg}`);
+      setSubmitting(false);
+    }
   }
 
   // ============ Step 2 (gate) → API → redirect ============
@@ -187,12 +259,30 @@ export function SimulatorForm() {
   // ============ UI ============
   return (
     <div className="space-y-8">
-      {/* Progress */}
-      <ol className="flex items-center justify-center gap-4 text-sm">
-        <ProgressStep n={1} label="Sua loja" active={step === 1} done={step === 2} />
-        <div className="h-px w-12 bg-slate-200" />
-        <ProgressStep n={2} label="Receba o resultado" active={step === 2} done={false} />
-      </ol>
+      {/* Progress — só mostra pra anônimo (logged user pula gate) */}
+      {!isLogged && authChecked && (
+        <ol className="flex items-center justify-center gap-4 text-sm">
+          <ProgressStep n={1} label="Sua loja" active={step === 1} done={step === 2} />
+          <div className="h-px w-12 bg-slate-200" />
+          <ProgressStep n={2} label="Receba o resultado" active={step === 2} done={false} />
+        </ol>
+      )}
+
+      {/* Aviso pra user logado */}
+      {isLogged && authChecked && (
+        <div className="rounded-xl border border-mudacao-200 bg-mudacao-50 p-4 text-sm text-mudacao-900">
+          <p className="flex items-center gap-2 font-semibold">
+            <CheckCircle2 className="h-4 w-4" /> Você está logado
+          </p>
+          <p className="mt-1 text-mudacao-800">
+            Sua simulação será salva automaticamente no{" "}
+            <a href="/minha-conta/historico" className="font-semibold underline">
+              histórico
+            </a>{" "}
+            (sem precisar preencher contato).
+          </p>
+        </div>
+      )}
 
       {/* ============================ STEP 1 ============================ */}
       {step === 1 && (
@@ -458,14 +548,36 @@ export function SimulatorForm() {
             )}
           </Section>
 
-          <button type="submit" className="btn-primary w-full text-lg">
-            Calcular o impacto na minha rede <ArrowRight className="h-5 w-5" />
+          <button
+            type="submit"
+            disabled={submitting}
+            className="btn-primary w-full text-lg"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" /> Calculando...
+              </>
+            ) : isLogged ? (
+              <>
+                Calcular minha simulação <ArrowRight className="h-5 w-5" />
+              </>
+            ) : (
+              <>
+                Calcular o impacto na minha rede <ArrowRight className="h-5 w-5" />
+              </>
+            )}
           </button>
+
+          {submitError && (
+            <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+              {submitError}
+            </p>
+          )}
         </form>
       )}
 
-      {/* ============================ STEP 2 (Gate) ============================ */}
-      {step === 2 && (
+      {/* ============================ STEP 2 (Gate) — só anônimo ============================ */}
+      {step === 2 && !isLogged && (
         <form
           ref={step2Ref}
           onSubmit={handleLeadSubmit}

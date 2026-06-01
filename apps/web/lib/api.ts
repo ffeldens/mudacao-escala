@@ -91,3 +91,62 @@ export async function leadAndSimulate(
   }
   return r.json();
 }
+
+// =============================================================================
+// Histórico de simulações (Starter+)
+// =============================================================================
+
+export interface SimulationHistoryItem {
+  id: string;
+  nome_loja: string | null;
+  n_lojas: number;
+  delta_folha_pct: string | null;
+  economia_estimada_mes: string | null;
+  headline: string | null;
+  created_at: string;
+}
+
+export interface SimulationHistoryResponse {
+  items: SimulationHistoryItem[];
+  total: number;
+}
+
+/**
+ * Lista as simulações do user logado. Precisa de access token Supabase.
+ * Requer plano pago (Starter+) — backend retorna 403 se Free.
+ */
+export async function listMySimulations(
+  accessToken: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<SimulationHistoryResponse> {
+  const params = new URLSearchParams();
+  if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.offset) params.set("offset", String(opts.offset));
+
+  const r = await fetch(`/api/me/simulations?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) {
+    throw new Error(
+      `Falha ao listar histórico: ${r.status} ${await r.text()}`,
+    );
+  }
+  return r.json();
+}
+
+/**
+ * Carrega uma simulação salva pelo ID. Retorna o SimulateResponse completo
+ * pra ser exibido na página de resultado.
+ */
+export async function getMySimulation(
+  accessToken: string,
+  simulationId: string,
+): Promise<SimulateResponse> {
+  const r = await fetch(`/api/me/simulations/${simulationId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) {
+    throw new Error(`Simulação não encontrada: ${r.status}`);
+  }
+  return r.json();
+}

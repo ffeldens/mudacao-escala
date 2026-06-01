@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from escala_freemium_api import __version__
-from escala_freemium_api.auth_dep import CurrentUser
+from escala_freemium_api.auth_dep import AuthenticatedUser, CurrentUser, OptionalUser
 from escala_freemium_api.config import get_settings
 from escala_freemium_api.db import Lead, Simulation, UserProfile, get_db
 from escala_freemium_api.email_sender import (
@@ -28,6 +30,8 @@ from escala_freemium_api.schemas import (
     PortalSessionResponse,
     SimulateRequest,
     SimulateResponse,
+    SimulationHistoryItem,
+    SimulationHistoryResponse,
     VersionResponse,
     WaitlistRequest,
     WaitlistResponse,
@@ -78,16 +82,25 @@ async def version() -> VersionResponse:
 
 
 @router.post("/simulate", response_model=SimulateResponse, tags=["simulator"])
-async def simulate(req: SimulateRequest, db: DbSession) -> SimulateResponse:
-    """Roda a simulação e persiste o resultado (sem lead — anônimo)."""
+async def simulate(
+    req: SimulateRequest,
+    db: DbSession,
+    user: OptionalUser = None,
+) -> SimulateResponse:
+    """Roda a simulação e persiste o resultado.
+
+    Se Authorization header presente com JWT válido, associa ao user.
+    Senão, simulação fica anônima (acessível via /lead-and-simulate).
+    """
     try:
         result = run_simulation(req)
     except Exception as e:
         logger.exception("Falha na simulação")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    # Persiste pra ter base analítica mesmo sem lead
     sim = Simulation(
+        user_id=UUID(user.id) if user else None,
+        nome_loja=req.nome_loja,
         inputs_hash=result.inputs_hash,
         inputs=req.model_dump(mode="json"),
         outputs=result.model_dump(mode="json"),
@@ -138,6 +151,117 @@ async def capture_lead(
         email=lead.email,
         email_enviado=False,
     )
+
+
+# =============================================================================
+# Histórico de simulações (Starter+)
+# =============================================================================
+
+
+# Plans que tem acesso ao histórico
+_PAID_PLANS = {"starter", "pro", "enterprise"}
+
+
+def _require_paid_plan(user: AuthenticatedUser, db: Session) -> UserProfile:
+    """Carrega profile e garante que tier é pago."""
+    profile = db.get(UserProfile, UUID(user.id))
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil não encontrado")
+    if profile.plan_tier not in _PAID_PLANS:
+        raise HTTPException(
+            status_code=403,
+            detail="Recurso disponível apenas no plano Starter ou superior",
+        )
+    return profile
+
+
+@router.get(
+    "/me/simulations",
+    response_model=SimulationHistoryResponse,
+    tags=["simulator"],
+)
+async def list_my_simulations(
+    user: CurrentUser,
+    db: DbSession,
+    limit: int = 50,
+    offset: int = 0,
+) -> SimulationHistoryResponse:
+    """Lista as simulações do user logado. Paywalled Starter+."""
+    _require_paid_plan(user, db)
+
+    user_uuid = UUID(user.id)
+
+    total = (
+        db.query(Simulation)
+        .filter(Simulation.user_id == user_uuid)
+        .count()
+    )
+
+    rows = (
+        db.query(Simulation)
+        .filter(Simulation.user_id == user_uuid)
+        .order_by(desc(Simulation.created_at))
+        .limit(min(limit, 200))
+        .offset(offset)
+        .all()
+    )
+
+    items = []
+    for sim in rows:
+        # Extrai headline do JSON de outputs (cached pra performance)
+        headline = None
+        if isinstance(sim.outputs, dict):
+            headline = sim.outputs.get("headline")
+
+        items.append(
+            SimulationHistoryItem(
+                id=str(sim.id),
+                nome_loja=sim.nome_loja,
+                n_lojas=sim.n_lojas_extrapolacao,
+                delta_folha_pct=sim.delta_folha_pct,
+                economia_estimada_mes=sim.economia_estimada_mes,
+                headline=headline,
+                created_at=sim.created_at.isoformat() if sim.created_at else "",
+            )
+        )
+
+    return SimulationHistoryResponse(items=items, total=total)
+
+
+@router.get(
+    "/me/simulations/{simulation_id}",
+    response_model=SimulateResponse,
+    tags=["simulator"],
+)
+async def get_my_simulation(
+    simulation_id: str,
+    user: CurrentUser,
+    db: DbSession,
+) -> SimulateResponse:
+    """Retorna o resultado completo de uma simulação salva.
+
+    Permite o frontend re-abrir uma simulação no /simulador/resultado
+    sem precisar refazer o cálculo. Paywalled Starter+.
+    """
+    _require_paid_plan(user, db)
+
+    try:
+        sim_uuid = UUID(simulation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="ID inválido") from e
+
+    sim = db.get(Simulation, sim_uuid)
+    if not sim or str(sim.user_id) != user.id:
+        raise HTTPException(status_code=404, detail="Simulação não encontrada")
+
+    if not isinstance(sim.outputs, dict):
+        raise HTTPException(
+            status_code=500,
+            detail="Dados da simulação corrompidos",
+        )
+
+    # outputs já está no formato SimulateResponse (serializado)
+    return SimulateResponse(**sim.outputs)
 
 
 # =============================================================================
