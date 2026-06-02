@@ -21,6 +21,7 @@ from escala_freemium_api.email_sender import (
     send_starter_welcome_email,
     send_waitlist_admin_notification,
 )
+from escala_freemium_api.clt_extras import evaluate_extra_risks, merge_risks
 from escala_freemium_api.clt_validator_pdf import render_clt_validator_pdf
 from escala_freemium_api.pdf import render_simulation_pdf
 from escala_freemium_api.schemas import (
@@ -296,27 +297,21 @@ async def validate_clt(
         logger.exception("Falha simulação no validador CLT")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    # Riscos CLT já vêm dentro do engine output (SimulationOutput.riscos_clt).
-    # SimulateResponse simplificado não expõe — pegamos via dict do engine.
-    # Pra render_clt_validator_pdf, anexamos _clt_risks como atributo ad-hoc.
-    engine_output_dict = result.model_dump(mode="json")
-    risks_raw = engine_output_dict.get("riscos_clt") or []
+    # Riscos do engine (artigos 71/66/67 + flags T&F)
+    from engine.core import simulate as engine_simulate  # noqa: PLC0415
+    from escala_freemium_api.simulation_adapter import (
+        _build_engine_input,  # noqa: PLC0415
+    )
 
-    # Se vazio, rodamos o engine de novo só pra extrair riscos (porque o
-    # SimulateResponse simplificado não tem riscos diretamente — só headline).
-    # Mais robusto: re-rodar engine.simulate e pegar output completo.
-    if not risks_raw:
-        from engine.core import simulate as engine_simulate  # noqa: PLC0415
-        from escala_freemium_api.simulation_adapter import (
-            _build_engine_input,  # noqa: PLC0415
-        )
+    engine_input = _build_engine_input(req, custom_financial=custom_financial)
+    engine_out = engine_simulate(engine_input)
+    engine_risks = [r.model_dump(mode="json") for r in engine_out.riscos_clt]
 
-        engine_input = _build_engine_input(req, custom_financial=custom_financial)
-        engine_out = engine_simulate(engine_input)
-        risks_raw = [r.model_dump(mode="json") for r in engine_out.riscos_clt]
+    # Riscos extras (viabilidade matemática, DSR mínimo, jornada noturna)
+    extra_risks = evaluate_extra_risks(req, result)
 
-    # Anexa como atributo dinâmico pra o PDF renderer ler
-    result._clt_risks = risks_raw  # type: ignore[attr-defined]
+    # Mescla e ordena por severidade (bad → good)
+    result._clt_risks = merge_risks(engine_risks, extra_risks)  # type: ignore[attr-defined]
 
     pdf_bytes = render_clt_validator_pdf(
         req=req,
