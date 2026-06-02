@@ -13,6 +13,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+from escala_freemium_api.clt_scheduler import build_schedule_for_pdf
 from escala_freemium_api.schemas import SimulateRequest, SimulateResponse
 
 
@@ -166,6 +167,44 @@ def evaluate_extra_risks(
                     f"Operação de {horas_dia}h/dia com apenas "
                     f"{req.fte_atual} FTEs requer turnos rotativos rígidos. "
                     f"Cuidado com interjornada (mín 11h) e DSR."
+                ),
+            }
+        )
+
+    # =========================================================================
+    # 3.5. Slots descobertos pela alocação real de shifts (Validador 2.0)
+    # =========================================================================
+    sched_prop = build_schedule_for_pdf(
+        fte_count=float(result.fte_proposto),
+        arredondamento_mode=req.arredondamento_fte,
+        dias_operacao=req.dias_operacao_semana,
+        hora_abertura=req.hora_abertura,
+        hora_fechamento=req.hora_fechamento,
+        modelo="5x2",
+    )
+
+    if sched_prop.slots_descobertos > 0 and sched_prop.slots_total > 0:
+        pct_descoberto = (
+            sched_prop.slots_descobertos / sched_prop.slots_total * 100
+        )
+        severidade = "bad" if pct_descoberto > 10 else "warn"
+        risks.append(
+            {
+                "severidade": severidade,
+                "artigo": "Cobertura simulada (Validador 2.0)",
+                "titulo": (
+                    f"{sched_prop.slots_descobertos} slots sem nenhum FTE "
+                    f"na semana modelo (5x2)"
+                ),
+                "descricao": (
+                    f"Distribuindo {sched_prop.fte_full_count} FTE(s) full e "
+                    f"{sched_prop.fte_meio_count} meio-turno(s) com shifts "
+                    f"reais (8h + 1h intervalo), sobram "
+                    f"{sched_prop.slots_descobertos}h/semana sem ninguém na "
+                    f"loja ({pct_descoberto:.0f}% do tempo de operação). "
+                    f"Veja a grade no relatório — slots em vermelho. "
+                    f"Solução: aumentar o quadro OU usar Planejador Pro pra "
+                    f"otimizar a distribuição."
                 ),
             }
         )

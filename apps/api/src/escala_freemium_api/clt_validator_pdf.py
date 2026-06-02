@@ -17,6 +17,10 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from escala_freemium_api.clt_scheduler import (
+    ScheduleResult,
+    build_schedule_for_pdf,
+)
 from escala_freemium_api.schemas import SimulateRequest, SimulateResponse
 
 logger = logging.getLogger(__name__)
@@ -225,68 +229,21 @@ def _build_html(
 DIAS_LABEL = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 
 
-def _calcular_grade_cobertura(
-    fte_count: float,
-    jornada_h: float,
-    hora_abertura: int,
-    hora_fechamento: int,
-    dias_op: int,
-) -> list[list[float]]:
-    """Distribui FTE-horas pelos slots da semana com pesos de pico.
+def _color_for_fte_int(fte: int) -> str:
+    """Cor de fundo pra contagem inteira de FTE-slot.
 
-    Lógica: cada slot (dia × hora) recebe um peso (1.0 base, 1.3 em
-    sex/sáb/dom, 1.2 em 14h-21h, multiplicativo). Soma normalizada
-    bate com fte_count × jornada_h.
-
-    Returns:
-        Matriz [7 dias][horas_de_operacao] com FTEs presentes (float)
-    """
-    horas_dia = hora_fechamento - hora_abertura
-    if horas_dia <= 0 or dias_op <= 0:
-        return [[0.0] * max(1, horas_dia) for _ in range(7)]
-
-    fte_horas_disp = fte_count * jornada_h
-
-    pesos: list[list[float]] = []
-    for dia in range(7):
-        linha = []
-        ativo = dia < dias_op
-        for h in range(hora_abertura, hora_fechamento):
-            if not ativo:
-                linha.append(0.0)
-                continue
-            peso = 1.0
-            if dia >= 4:  # sex, sáb, dom
-                peso *= 1.3
-            if 14 <= h < 21:  # pico
-                peso *= 1.2
-            linha.append(peso)
-        pesos.append(linha)
-
-    soma = sum(sum(linha) for linha in pesos)
-    if soma == 0:
-        return pesos
-    fator = fte_horas_disp / soma
-    return [[p * fator for p in linha] for linha in pesos]
-
-
-def _color_for_fte(fte: float, min_required: float = 1.0) -> str:
-    """Retorna cor de fundo baseado em quantos FTEs estão presentes.
-
-    < min_required → vermelho (sub-cobertura)
-    = min_required (até 1.5x) → amarelo (apertado)
-    1.5x a 3x → verde claro
-    > 3x → verde escuro
+    0   → cinza claro (descoberto / fechado)
+    1   → amarelo (operação no mínimo)
+    2   → verde claro (cobertura ok)
+    3+  → verde escuro (folgado)
     """
     if fte == 0:
-        return "#f1f5f9"  # cinza claro (fechado)
-    if fte < min_required:
-        return "#fee2e2"  # red-100
-    if fte < min_required * 1.5:
-        return "#fef3c7"  # amber-100
-    if fte < min_required * 3:
-        return "#dbeee4"  # mudacao verde claro
-    return "#b8dcc8"  # mudacao verde mais escuro
+        return "#fee2e2"  # vermelho — gap descoberto em dia operacional
+    if fte == 1:
+        return "#fef3c7"  # amarelo
+    if fte == 2:
+        return "#dbeee4"  # verde claro
+    return "#b8dcc8"  # verde mais escuro
 
 
 def _build_grade_block(req: SimulateRequest, result: SimulateResponse) -> str:
@@ -294,44 +251,73 @@ def _build_grade_block(req: SimulateRequest, result: SimulateResponse) -> str:
     if horas_dia <= 0:
         return ""
 
-    grade_atual = _calcular_grade_cobertura(
-        fte_count=req.fte_atual,
-        jornada_h=44,  # 6x1
+    # ===== Alocação real de shifts (Validador 2.0) =====
+    sched_atual = build_schedule_for_pdf(
+        fte_count=float(req.fte_atual),
+        arredondamento_mode=req.arredondamento_fte,
+        dias_operacao=req.dias_operacao_semana,
         hora_abertura=req.hora_abertura,
         hora_fechamento=req.hora_fechamento,
-        dias_op=req.dias_operacao_semana,
+        modelo="6x1",
     )
-    grade_prop = _calcular_grade_cobertura(
+    sched_prop = build_schedule_for_pdf(
         fte_count=float(result.fte_proposto),
-        jornada_h=40,  # 5x2
+        arredondamento_mode=req.arredondamento_fte,
+        dias_operacao=req.dias_operacao_semana,
         hora_abertura=req.hora_abertura,
         hora_fechamento=req.hora_fechamento,
-        dias_op=req.dias_operacao_semana,
+        modelo="5x2",
     )
 
     horas = list(range(req.hora_abertura, req.hora_fechamento))
 
-    def render_tabela(grade: list[list[float]], titulo: str, subtitulo: str) -> str:
-        # Cabeçalho de horas
-        thead_horas = "".join(
-            f'<th class="hr">{h}h</th>' for h in horas
-        )
+    def render_tabela(
+        sched: ScheduleResult,
+        titulo: str,
+        subtitulo: str,
+        dias_op: int,
+    ) -> str:
+        thead_horas = "".join(f'<th class="hr">{h}h</th>' for h in horas)
         tbody_rows = ""
         for i, dia_label in enumerate(DIAS_LABEL):
             cells = ""
-            for j, h in enumerate(horas):
-                fte = grade[i][j]
-                color = _color_for_fte(fte)
-                text = f"{fte:.1f}" if fte > 0 else "—"
+            is_fechado = i >= dias_op
+            for j, _h in enumerate(horas):
+                if is_fechado:
+                    text = "—"
+                    color = "#f1f5f9"  # cinza claro (loja fechada)
+                else:
+                    fte = sched.grade[i][j]
+                    text = str(fte) if fte > 0 else "0"
+                    color = _color_for_fte_int(fte)
                 cells += (
                     f'<td class="slot" style="background:{color};">{text}</td>'
                 )
             tbody_rows += f"<tr><th class='dia'>{dia_label}</th>{cells}</tr>"
 
+        # Sumário do schedule
+        sumario_html = (
+            f"<p class='grade-extra'>"
+            f"<strong>{sched.fte_full_count}</strong> FTE full · "
+            f"<strong>{sched.fte_meio_count}</strong> meio-turno · "
+        )
+        if sched.slots_descobertos > 0:
+            sumario_html += (
+                f"<span style='color:#dc2626;font-weight:600;'>"
+                f"{sched.slots_descobertos} slots sem cobertura "
+                f"({sched.slots_descobertos}h/sem)</span></p>"
+            )
+        else:
+            sumario_html += (
+                "<span style='color:#15803d;font-weight:600;'>"
+                "Cobertura completa</span></p>"
+            )
+
         return f"""
         <div class="grade-card">
           <h3>{titulo}</h3>
           <p class="grade-sub">{subtitulo}</p>
+          {sumario_html}
           <table class="grade">
             <thead>
               <tr><th class="dia-h"></th>{thead_horas}</tr>
@@ -341,38 +327,48 @@ def _build_grade_block(req: SimulateRequest, result: SimulateResponse) -> str:
         </div>
         """
 
-    sub_atual = f"{req.fte_atual} FTE × 44h/sem (6x1)"
-    sub_prop = f"{float(result.fte_proposto):.1f} FTE × 40h/sem (5x2)"
+    sub_atual = (
+        f"{req.fte_atual} FTE × 44h/sem (6x1) · shifts de 8h "
+        f"+ 1h intervalo (Art 71)"
+    )
+    sub_prop = (
+        f"{float(result.fte_proposto):.1f} FTE × 40h/sem (5x2) · shifts "
+        f"de 8h + 1h intervalo + meio-turno 4h"
+    )
 
     legenda = """
     <div class="grade-legend">
-      <span class="lg-item"><span class="sw" style="background:#fee2e2;"></span> &lt; 1 FTE (sub-cobertura)</span>
-      <span class="lg-item"><span class="sw" style="background:#fef3c7;"></span> 1–1.5 FTE (apertado)</span>
-      <span class="lg-item"><span class="sw" style="background:#dbeee4;"></span> 1.5–3 FTE (ok)</span>
+      <span class="lg-item"><span class="sw" style="background:#fee2e2;"></span> 0 FTE (slot descoberto — violação)</span>
+      <span class="lg-item"><span class="sw" style="background:#fef3c7;"></span> 1 FTE (mínimo)</span>
+      <span class="lg-item"><span class="sw" style="background:#dbeee4;"></span> 2 FTE (cobertura ok)</span>
       <span class="lg-item"><span class="sw" style="background:#b8dcc8;"></span> 3+ FTE (folgado)</span>
-      <span class="lg-item"><span class="sw" style="background:#f1f5f9;"></span> Fechado</span>
+      <span class="lg-item"><span class="sw" style="background:#f1f5f9;"></span> Loja fechada</span>
     </div>
     """
 
     return f"""
-    <h2>Grade de cobertura teórica (semana modelo)</h2>
+    <h2>Grade de cobertura simulada (semana modelo)</h2>
     <p>
-      Distribuição teórica de FTE × hora × dia, com peso de pico em
-      sex/sáb/dom e horário 14h–21h. <strong>Cada célula é o número
-      esperado de pessoas trabalhando naquela hora-dia</strong>.
+      Alocação heurística de shifts reais — cada FTE full faz 8h corridas
+      <strong>com 1h de intervalo intrajornada</strong> (CLT Art 71),
+      cada meio-turno faz 4h contínuas no pico. Folgas distribuídas com
+      rotação (5x2: 2/sem; 6x1: 1/sem). <strong>Cada célula é o número
+      real de pessoas presentes naquela hora-dia</strong>.
     </p>
 
     <div class="grade-row">
-      {render_tabela(grade_atual, "Modelo atual 6x1", sub_atual)}
-      {render_tabela(grade_prop, "Modelo proposto 5x2", sub_prop)}
+      {render_tabela(sched_atual, "Modelo atual 6x1", sub_atual, req.dias_operacao_semana)}
+      {render_tabela(sched_prop, "Modelo proposto 5x2", sub_prop, req.dias_operacao_semana)}
     </div>
 
     {legenda}
 
     <div class="grade-disclaimer">
-      <strong>⚠️ Isto é uma distribuição teórica</strong>, não uma escala
-      operacional. Pra escala real otimizada respeitando absenteísmo, picos
-      históricos, comissionistas e restrições por função, use o
+      <strong>⚠️ Esta é uma alocação heurística</strong>, não otimização real.
+      Distribui shifts em 2 patterns (manhã/tarde) com folgas rotativas,
+      mas <strong>não considera</strong> demanda histórica por hora,
+      restrições por função (comissionistas T&F) nem absenteísmo.
+      Pra escala otimizada com dados reais da operação, use o
       <em>Planejador Automático</em> do plano Pro.
     </div>
     """
@@ -594,6 +590,11 @@ def _css() -> str:
   .grade-card .grade-sub {
     color: #64748b;
     font-size: 8pt;
+    margin: 0 0 4pt;
+  }
+  .grade-card .grade-extra {
+    color: #475569;
+    font-size: 9pt;
     margin: 0 0 8pt;
   }
   table.grade {
