@@ -23,6 +23,7 @@ type FormState = {
   cenario: "pessimista" | "neutro" | "otimista";
   ganho_produtividade_pct: number;
   manter_salario_nominal: boolean;
+  arredondamento_fte: "meio" | "inteiro" | "decimal";
   n_lojas_rede: string;
 };
 
@@ -37,6 +38,7 @@ const INITIAL: FormState = {
   cenario: "neutro",
   ganho_produtividade_pct: 5,
   manter_salario_nominal: true,
+  arredondamento_fte: "meio",
   n_lojas_rede: "1",
 };
 
@@ -88,6 +90,7 @@ export function ValidadorCLTForm() {
         cenario: data.cenario,
         ganho_produtividade_pct: (data.ganho_produtividade_pct / 100).toFixed(4),
         manter_salario_nominal: data.manter_salario_nominal,
+        arredondamento_fte: data.arredondamento_fte,
         n_lojas_rede: data.n_lojas_rede,
       };
 
@@ -268,6 +271,26 @@ export function ValidadorCLTForm() {
             <option value="pessimista">Pessimista</option>
             <option value="neutro">Neutro (Fitch)</option>
             <option value="otimista">Otimista (com WFM)</option>
+          </select>
+        </Field>
+
+        <Field
+          label="Arredondamento de FTE"
+          hint="Como contar pessoas no resultado"
+        >
+          <select
+            className="input"
+            value={form.arredondamento_fte}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                arredondamento_fte: e.target.value as FormState["arredondamento_fte"],
+              })
+            }
+          >
+            <option value="meio">Meio-turno (múltiplo de 0,5)</option>
+            <option value="inteiro">Só FTE inteiro</option>
+            <option value="decimal">Decimal exato</option>
           </select>
         </Field>
       </div>

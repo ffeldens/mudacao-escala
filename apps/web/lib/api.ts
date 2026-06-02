@@ -9,6 +9,8 @@ export type Cenario = "pessimista" | "neutro" | "otimista";
 export type Porte = "PP" | "P" | "M" | "G";
 export type Setor = "varejo" | "food_service" | "outros";
 
+export type ArredondamentoFte = "meio" | "inteiro" | "decimal";
+
 export interface SimulateRequest {
   nome_loja?: string;
   setor: Setor;
@@ -22,6 +24,7 @@ export interface SimulateRequest {
   cenario: Cenario;
   ganho_produtividade_pct?: string;
   manter_salario_nominal?: boolean;
+  arredondamento_fte?: ArredondamentoFte;
   n_lojas_rede: number;
 }
 

@@ -61,6 +61,12 @@ export const simulationSchema = z.object({
     .default(5), // em pp (5 = 5%)
   manter_salario_nominal: z.boolean().default(true),
 
+  // Arredondamento de FTEs no resultado
+  // 'meio' default (vendedor full ou meio-turno)
+  arredondamento_fte: z
+    .enum(["meio", "inteiro", "decimal"])
+    .default("meio"),
+
   // Rede
   n_lojas_rede: z
     .number({ invalid_type_error: "Informe o número de lojas" })
@@ -143,6 +149,7 @@ export function buildApiPayload(sim: SimulationFormData, lead: LeadFormData) {
       cenario: sim.cenario,
       ganho_produtividade_pct: (sim.ganho_produtividade_pct / 100).toFixed(4),
       manter_salario_nominal: sim.manter_salario_nominal,
+      arredondamento_fte: sim.arredondamento_fte,
       n_lojas_rede: sim.n_lojas_rede,
     },
   };

@@ -41,6 +41,7 @@ type SimFormState = {
   cenario: "pessimista" | "neutro" | "otimista";
   ganho_produtividade_pct: number;
   manter_salario_nominal: boolean;
+  arredondamento_fte: "meio" | "inteiro" | "decimal";
   n_lojas_rede: string;
 };
 
@@ -56,6 +57,7 @@ const INITIAL_SIM: SimFormState = {
   cenario: "neutro",
   ganho_produtividade_pct: 5,
   manter_salario_nominal: true,
+  arredondamento_fte: "meio",
   n_lojas_rede: "1",
 };
 
@@ -436,6 +438,63 @@ export function SimulatorForm() {
                   />
                 </label>
               ))}
+            </div>
+
+            {/* Arredondamento de FTE (sempre visível — é decisão importante) */}
+            <div className="mt-6">
+              <label className="label">
+                Como arredondar o número de FTEs?
+              </label>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(
+                  [
+                    {
+                      v: "meio",
+                      title: "Meio-turno",
+                      desc: "Múltiplo de 0,5 (full ou meio-turno)",
+                    },
+                    {
+                      v: "inteiro",
+                      title: "Só FTE inteiro",
+                      desc: "Apenas full-time (arredonda pra cima)",
+                    },
+                    {
+                      v: "decimal",
+                      title: "Decimal exato",
+                      desc: "Sem arredondar (matemática pura)",
+                    },
+                  ] as const
+                ).map((opt) => (
+                  <label
+                    key={opt.v}
+                    className={cn(
+                      "flex cursor-pointer flex-col rounded-lg border-2 p-3 text-sm transition",
+                      sim.arredondamento_fte === opt.v
+                        ? "border-mudacao-700 bg-mudacao-50"
+                        : "border-slate-200 hover:border-slate-300",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-mudacao-950">
+                        {opt.title}
+                      </span>
+                      <input
+                        type="radio"
+                        name="arredondamento_fte"
+                        value={opt.v}
+                        checked={sim.arredondamento_fte === opt.v}
+                        onChange={() =>
+                          setSim({ ...sim, arredondamento_fte: opt.v })
+                        }
+                        className="accent-mudacao-700"
+                      />
+                    </div>
+                    <span className="mt-1 text-xs text-slate-500">
+                      {opt.desc}
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
 
             {/* Premissas avançadas (colapsável) */}

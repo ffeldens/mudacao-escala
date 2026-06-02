@@ -55,6 +55,12 @@ class SimulateRequest(BaseModel):
     )
     manter_salario_nominal: bool = True
 
+    # Como arredondar FTEs no resultado:
+    # - 'meio'    : múltiplo de 0,5 (default — vendedor full ou meio-turno)
+    # - 'inteiro' : FTE inteiro (só full-time)
+    # - 'decimal' : sem arredondar (matemática pura)
+    arredondamento_fte: Literal["meio", "inteiro", "decimal"] = "meio"
+
     # Extrapolação rede (free também mostra projeção pra N lojas)
     n_lojas_rede: int = Field(default=1, ge=1, le=10_000)
 

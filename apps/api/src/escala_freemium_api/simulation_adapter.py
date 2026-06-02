@@ -7,6 +7,7 @@ completa que o engine espera (1 função "Equipe" agregando tudo).
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal
 
 from engine.core import simulate as engine_simulate
@@ -34,6 +35,27 @@ _PORTE_TO_CLUSTER = {"PP": "PP", "P": "P", "M": "M", "G": "G"}
 WFM_ECONOMY_PCT = Decimal("0.05")
 
 
+def _round_fte(value: Decimal, mode: str) -> Decimal:
+    """Arredonda FTE pra cima conforme o modo.
+
+    - 'decimal' : retorna como está (sem arredondar)
+    - 'meio'    : próximo múltiplo de 0,5 (ex: 10.3 → 10.5, 10.6 → 11.0)
+    - 'inteiro' : próximo inteiro (ex: 10.3 → 11, 10.0 → 10)
+
+    Sempre arredonda PRA CIMA (ceil) — você não pode ter "menos" pessoa
+    que o necessário.
+    """
+    if mode == "decimal":
+        return value
+    f = float(value)
+    if mode == "inteiro":
+        return Decimal(math.ceil(f))
+    if mode == "meio":
+        # Próximo múltiplo de 0.5
+        return Decimal(math.ceil(f * 2) / 2)
+    return value
+
+
 def run_simulation(
     req: SimulateRequest,
     custom_financial: FinancialAssumptions | None = None,
@@ -52,46 +74,80 @@ def run_simulation(
     # Roda engine
     output: SimulationOutput = engine_simulate(engine_input)
 
-    # Extrapolação rede: multiplica delta por N lojas
+    # ============================================================
+    # Arredondamento de FTE conforme escolha do user
+    # ============================================================
+    mode = req.arredondamento_fte
+    fte_atual = output.fte_atual_total
+    fte_proposto_raw = output.fte_proposto_total
+    fte_proposto = _round_fte(fte_proposto_raw, mode)
+
+    # Recalcula folha proposta proporcionalmente ao novo FTE
+    if fte_proposto_raw > 0:
+        ratio_ajuste = fte_proposto / fte_proposto_raw
+        folha_proposta = (output.folha_proposta_mes * ratio_ajuste).quantize(
+            Decimal("0.01")
+        )
+    else:
+        folha_proposta = output.folha_proposta_mes
+
+    delta_folha_mes = folha_proposta - output.folha_atual_mes
+    delta_folha_pct = (
+        (delta_folha_mes / output.folha_atual_mes * 100).quantize(Decimal("0.01"))
+        if output.folha_atual_mes > 0
+        else Decimal("0")
+    )
+
+    # Mesmo arredondamento nos 3 cenários (consistência)
+    cenarios = {}
+    for k, v in output.cenarios.items():
+        fte_arred = _round_fte(v.fte_total, mode)
+        if v.fte_total > 0:
+            ratio = fte_arred / v.fte_total
+            folha_arred = (v.folha_total * ratio).quantize(Decimal("0.01"))
+        else:
+            folha_arred = v.folha_total
+        delta_arred = folha_arred - output.folha_atual_mes
+        delta_pct_arred = (
+            (delta_arred / output.folha_atual_mes * 100).quantize(Decimal("0.01"))
+            if output.folha_atual_mes > 0
+            else Decimal("0")
+        )
+        cenarios[k] = CenarioOut(
+            cenario=v.cenario,
+            ratio_aplicado=v.ratio_aplicado,
+            fte_total=fte_arred,
+            folha_total=folha_arred,
+            delta_folha=delta_arred.quantize(Decimal("0.01")),
+            delta_folha_pct=delta_pct_arred,
+        )
+
+    # Extrapolação rede usa o delta ajustado
     n_lojas = req.n_lojas_rede
-    delta_mes_rede = output.delta_folha_mes * n_lojas
+    delta_mes_rede = delta_folha_mes * n_lojas
     delta_ano_rede = delta_mes_rede * 12
 
     # Headline
-    if output.delta_folha_mes > 0:
+    if delta_folha_mes > 0:
         headline = _format_headline_gasto(delta_mes_rede, n_lojas)
     else:
         headline = "Sua rede pode operar 5x2 sem aumento de folha (cenário raro)."
 
-    # (helper definido abaixo)
-
     # Economia potencial WFM = 5% da folha proposta × N lojas
-    economia_wfm = (output.folha_proposta_mes * WFM_ECONOMY_PCT * n_lojas).quantize(
+    economia_wfm = (folha_proposta * WFM_ECONOMY_PCT * n_lojas).quantize(
         Decimal("0.01")
     )
 
     return SimulateResponse(
         inputs_hash=output.inputs_hash,
         folha_atual_mes=output.folha_atual_mes,
-        folha_proposta_mes=output.folha_proposta_mes,
-        delta_folha_mes=output.delta_folha_mes,
-        delta_folha_pct=output.delta_folha_pct,
-        fte_atual=output.fte_atual_total,
-        fte_proposto=output.fte_proposto_total,
-        fte_extras_necessarios=(output.fte_proposto_total - output.fte_atual_total).quantize(
-            Decimal("0.01")
-        ),
-        cenarios={
-            k: CenarioOut(
-                cenario=v.cenario,
-                ratio_aplicado=v.ratio_aplicado,
-                fte_total=v.fte_total,
-                folha_total=v.folha_total,
-                delta_folha=v.delta_folha,
-                delta_folha_pct=v.delta_folha_pct,
-            )
-            for k, v in output.cenarios.items()
-        },
+        folha_proposta_mes=folha_proposta,
+        delta_folha_mes=delta_folha_mes.quantize(Decimal("0.01")),
+        delta_folha_pct=delta_folha_pct,
+        fte_atual=fte_atual,
+        fte_proposto=fte_proposto,
+        fte_extras_necessarios=(fte_proposto - fte_atual).quantize(Decimal("0.01")),
+        cenarios=cenarios,
         n_lojas=n_lojas,
         delta_folha_rede_mes=delta_mes_rede.quantize(Decimal("0.01")),
         delta_folha_rede_ano=delta_ano_rede.quantize(Decimal("0.01")),
