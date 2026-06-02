@@ -205,26 +205,32 @@ def evaluate_extra_risks(
         if sched.slots_descobertos == 0 or sched.slots_total == 0:
             return None
         pct = sched.slots_descobertos / sched.slots_total * 100
-        severidade = "bad" if pct > 10 else "warn"
+        # Qualquer slot sem ninguém na loja aberta é violação operacional
+        # grave — não tem como funcionar com 0 pessoas. Sempre 'bad'.
+        # Severidade poderia escalar conforme volume, mas mesmo 1 slot
+        # já é problema sério que precisa virar atenção do gestor.
         return {
-            "severidade": severidade,
+            "severidade": "bad",
             "artigo": f"Cobertura simulada ({modelo_label})",
             "titulo": (
-                f"{sched.slots_descobertos} slots sem nenhum FTE na grade "
-                f"do {modelo_label}"
+                f"{sched.slots_descobertos} "
+                f"{'slot' if sched.slots_descobertos == 1 else 'slots'} "
+                f"sem nenhum FTE na grade do {modelo_label}"
             ),
             "descricao": (
                 f"Distribuindo {sched.fte_full_count} FTE(s) full + "
                 f"{sched.fte_meio_count} meio-turno(s) com shifts reais "
-                f"({jornada}), sobram {sched.slots_descobertos}h/semana sem "
-                f"ninguém na loja ({pct:.0f}% do tempo de operação). "
+                f"({jornada}), sobra(m) {sched.slots_descobertos}h/semana "
+                f"sem ninguém na loja ({pct:.1f}% do tempo de operação). "
                 f"Veja a grade do {modelo_label} no relatório — células em "
                 f"vermelho são esses gaps. "
-                f"⚠️ Isso pode acontecer mesmo com cobertura agregada OK — a "
-                f"heurística aloca FTEs em 2 patterns (manhã/tarde), e "
-                f"horários extremos ou de transição podem ficar descobertos. "
-                f"Numa escala REAL otimizada (Planejador Pro), esses gaps "
-                f"desaparecem com alocação inteligente."
+                f"⚠️ Mesmo 1 hora sem cobertura é violação operacional — "
+                f"a loja está aberta sem ninguém pra atender. Isso pode "
+                f"acontecer mesmo com cobertura agregada OK por causa da "
+                f"alocação heurística (2 patterns manhã/tarde) deixar "
+                f"horários extremos ou de transição descobertos. Numa "
+                f"escala REAL otimizada (Planejador Pro), esses gaps "
+                f"desaparecem."
             ),
         }
 
