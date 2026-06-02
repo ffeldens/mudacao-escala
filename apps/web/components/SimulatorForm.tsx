@@ -25,6 +25,7 @@ import {
 } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { HorariosFields } from "@/components/HorariosFields";
 
 type FormErrors<T> = Partial<Record<keyof T, string>>;
 
@@ -35,8 +36,18 @@ type SimFormState = {
   porte: "PP" | "P" | "M" | "G";
   setor: "varejo" | "food_service" | "outros";
   faturamento_mensal: string;
+  // Horário seg-sex
   hora_abertura: number;
   hora_fechamento: number;
+  // Sábado
+  hora_abertura_sabado: number | null;
+  hora_fechamento_sabado: number | null;
+  sabado_fechado: boolean;
+  // Domingo
+  hora_abertura_domingo: number | null;
+  hora_fechamento_domingo: number | null;
+  domingo_fechado: boolean;
+  // Legado
   dias_operacao_semana: number;
   cenario: "pessimista" | "neutro" | "otimista";
   ganho_produtividade_pct: number;
@@ -53,6 +64,12 @@ const INITIAL_SIM: SimFormState = {
   faturamento_mensal: "",
   hora_abertura: 10,
   hora_fechamento: 22,
+  hora_abertura_sabado: null,
+  hora_fechamento_sabado: null,
+  sabado_fechado: false,
+  hora_abertura_domingo: null,
+  hora_fechamento_domingo: null,
+  domingo_fechado: false,
   dias_operacao_semana: 7,
   cenario: "neutro",
   ganho_produtividade_pct: 5,
@@ -553,58 +570,26 @@ export function SimulatorForm() {
                   </label>
                 </Field>
 
-                <Field label={`Abertura: ${sim.hora_abertura}h`} hint="">
-                  <input
-                    type="range"
-                    min={6}
-                    max={14}
-                    step={1}
-                    value={sim.hora_abertura}
-                    onChange={(e) =>
-                      setSim({ ...sim, hora_abertura: Number(e.target.value) })
-                    }
-                    className="w-full accent-mudacao-700"
-                  />
-                </Field>
-
-                <Field label={`Fechamento: ${sim.hora_fechamento}h`} hint="">
-                  <input
-                    type="range"
-                    min={16}
-                    max={24}
-                    step={1}
-                    value={sim.hora_fechamento}
-                    onChange={(e) =>
-                      setSim({
-                        ...sim,
-                        hora_fechamento: Number(e.target.value),
-                      })
-                    }
-                    className="w-full accent-mudacao-700"
-                  />
-                </Field>
-
-                <Field
-                  label={`Dias de operação/semana: ${sim.dias_operacao_semana}`}
-                  hint=""
-                >
-                  <input
-                    type="range"
-                    min={1}
-                    max={7}
-                    step={1}
-                    value={sim.dias_operacao_semana}
-                    onChange={(e) =>
-                      setSim({
-                        ...sim,
-                        dias_operacao_semana: Number(e.target.value),
-                      })
-                    }
-                    className="w-full accent-mudacao-700"
-                  />
-                </Field>
               </div>
             )}
+
+            {/* Horários de funcionamento (sempre visível — decisão importante) */}
+            <div className="mt-6">
+              <label className="label">Horário de funcionamento</label>
+              <HorariosFields
+                value={{
+                  hora_abertura: sim.hora_abertura,
+                  hora_fechamento: sim.hora_fechamento,
+                  hora_abertura_sabado: sim.hora_abertura_sabado,
+                  hora_fechamento_sabado: sim.hora_fechamento_sabado,
+                  sabado_fechado: sim.sabado_fechado,
+                  hora_abertura_domingo: sim.hora_abertura_domingo,
+                  hora_fechamento_domingo: sim.hora_fechamento_domingo,
+                  domingo_fechado: sim.domingo_fechado,
+                }}
+                onChange={(h) => setSim({ ...sim, ...h })}
+              />
+            </div>
           </Section>
 
           <button

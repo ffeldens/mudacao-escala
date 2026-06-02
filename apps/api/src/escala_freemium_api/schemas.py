@@ -40,9 +40,22 @@ class SimulateRequest(BaseModel):
         description="Faturamento mensal estimado (opcional, usado pra %folha/fat)",
     )
 
-    # Horário
+    # Horário dias úteis (seg-sex)
     hora_abertura: int = Field(default=10, ge=0, le=23)
     hora_fechamento: int = Field(default=22, ge=0, le=23)
+
+    # Sábado — None herda dias úteis; "fechado=True" pula o dia
+    hora_abertura_sabado: int | None = Field(default=None, ge=0, le=23)
+    hora_fechamento_sabado: int | None = Field(default=None, ge=0, le=23)
+    sabado_fechado: bool = False
+
+    # Domingo — idem
+    hora_abertura_domingo: int | None = Field(default=None, ge=0, le=23)
+    hora_fechamento_domingo: int | None = Field(default=None, ge=0, le=23)
+    domingo_fechado: bool = False
+
+    # Deprecated: kept for retrocompat. Calculado automaticamente a partir
+    # dos toggles sabado_fechado / domingo_fechado quando não enviado.
     dias_operacao_semana: int = Field(default=7, ge=1, le=7)
 
     # Cenário escolhido pelo usuário

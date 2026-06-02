@@ -13,7 +13,12 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from escala_freemium_api.clt_scheduler import build_schedule_for_pdf
+from escala_freemium_api.clt_scheduler import build_schedule_from_horarios
+from escala_freemium_api.horarios import (
+    dias_operacao_efetivos,
+    get_horario_dia,
+    horas_semanais_operacao,
+)
 from escala_freemium_api.schemas import SimulateRequest, SimulateResponse
 
 
@@ -31,8 +36,10 @@ def evaluate_extra_risks(
     # =========================================================================
     # 1. Viabilidade matemática do quadro
     # =========================================================================
-    horas_dia = req.hora_fechamento - req.hora_abertura
-    horas_semanais_necessarias = req.dias_operacao_semana * horas_dia
+    # Horas/semana levando em conta horários diferenciados (seg-sex/sab/dom)
+    horas_semanais_necessarias = horas_semanais_operacao(req)
+    dias_op_efetivos = dias_operacao_efetivos(req)
+    horas_dia_seg_sex = req.hora_fechamento - req.hora_abertura
 
     # Atual (6x1: 44h/semana por FTE)
     horas_disponiveis_atual = req.fte_atual * 44
@@ -59,8 +66,8 @@ def evaluate_extra_risks(
                 "artigo": "Viabilidade operacional",
                 "titulo": "Quadro atual já é insuficiente",
                 "descricao": (
-                    f"Sua operação roda {req.dias_operacao_semana} dias × "
-                    f"{horas_dia}h = {horas_semanais_necessarias}h/semana. "
+                    f"Sua operação roda {dias_op_efetivos} dias/semana, "
+                    f"totalizando {horas_semanais_necessarias}h/semana. "
                     f"Com {req.fte_atual} FTE(s) × 44h, você tem apenas "
                     f"{horas_disponiveis_atual}h disponíveis "
                     f"({cobertura_atual * 100:.0f}% do necessário). "
@@ -122,7 +129,7 @@ def evaluate_extra_risks(
     # =========================================================================
     # 2. Operação 7d/semana com poucos FTEs (DSR)
     # =========================================================================
-    if req.dias_operacao_semana == 7 and req.fte_atual < 2:
+    if dias_op_efetivos == 7 and req.fte_atual < 2:
         risks.append(
             {
                 "severidade": "bad",
@@ -142,6 +149,7 @@ def evaluate_extra_risks(
     # =========================================================================
     # CLT Art 59: jornada máxima 10h/dia (8h + 2h extras). Se a operação
     # exige mais que isso por dia e o headcount não permite turnos, alerta.
+    horas_dia = horas_dia_seg_sex  # dia mais longo (seg-sex)
     if horas_dia > 10 and req.fte_atual <= 2:
         risks.append(
             {
@@ -174,12 +182,11 @@ def evaluate_extra_risks(
     # =========================================================================
     # 3.5. Slots descobertos pela alocação real de shifts (Validador 2.0)
     # =========================================================================
-    sched_prop = build_schedule_for_pdf(
+    horarios = {d: get_horario_dia(req, d) for d in range(7)}
+    sched_prop = build_schedule_from_horarios(
         fte_count=float(result.fte_proposto),
         arredondamento_mode=req.arredondamento_fte,
-        dias_operacao=req.dias_operacao_semana,
-        hora_abertura=req.hora_abertura,
-        hora_fechamento=req.hora_fechamento,
+        horarios_por_dia=horarios,
         modelo="5x2",
     )
 

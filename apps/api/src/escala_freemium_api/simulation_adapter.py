@@ -20,6 +20,7 @@ from engine.models import (
     StoreInput,
 )
 
+from escala_freemium_api.horarios import dias_operacao_efetivos
 from escala_freemium_api.schemas import (
     CenarioOut,
     SetorType,
@@ -180,6 +181,8 @@ def _build_engine_input(
         )
     ]
 
+    # Engine só aceita horário único — passamos o de dia útil (seg-sex)
+    # como referência. Validações por dia específico ficam no clt_extras.
     store = StoreInput(
         codigo="freemium-001",
         nome=req.nome_loja or "Minha loja",
@@ -188,7 +191,7 @@ def _build_engine_input(
         cluster=_PORTE_TO_CLUSTER[req.porte],
         hora_abertura=req.hora_abertura,
         hora_fechamento=req.hora_fechamento,
-        dias_operacao_semana=req.dias_operacao_semana,
+        dias_operacao_semana=dias_operacao_efetivos(req),
         funcoes=funcoes,
         faturamento_mensal=req.faturamento_mensal,
     )

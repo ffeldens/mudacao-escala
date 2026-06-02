@@ -19,7 +19,12 @@ from typing import Any
 
 from escala_freemium_api.clt_scheduler import (
     ScheduleResult,
-    build_schedule_for_pdf,
+    build_schedule_from_horarios,
+)
+from escala_freemium_api.horarios import (
+    dias_operacao_efetivos,
+    get_horario_dia,
+    horario_label,
 )
 from escala_freemium_api.schemas import SimulateRequest, SimulateResponse
 
@@ -247,45 +252,52 @@ def _color_for_fte_int(fte: int) -> str:
 
 
 def _build_grade_block(req: SimulateRequest, result: SimulateResponse) -> str:
-    horas_dia = req.hora_fechamento - req.hora_abertura
-    if horas_dia <= 0:
+    horarios = {d: get_horario_dia(req, d) for d in range(7)}
+    horario_str = horario_label(req)
+
+    # Bounds globais da grade (menor abertura, maior fechamento)
+    aberturas = [h[0] for h in horarios.values() if h is not None]
+    fechamentos = [h[1] for h in horarios.values() if h is not None]
+    if not aberturas:
         return ""
 
-    # ===== Alocação real de shifts (Validador 2.0) =====
-    sched_atual = build_schedule_for_pdf(
+    grade_ini = min(aberturas)
+    grade_fim = max(fechamentos)
+    horas = list(range(grade_ini, grade_fim))
+
+    sched_atual = build_schedule_from_horarios(
         fte_count=float(req.fte_atual),
         arredondamento_mode=req.arredondamento_fte,
-        dias_operacao=req.dias_operacao_semana,
-        hora_abertura=req.hora_abertura,
-        hora_fechamento=req.hora_fechamento,
+        horarios_por_dia=horarios,
         modelo="6x1",
     )
-    sched_prop = build_schedule_for_pdf(
+    sched_prop = build_schedule_from_horarios(
         fte_count=float(result.fte_proposto),
         arredondamento_mode=req.arredondamento_fte,
-        dias_operacao=req.dias_operacao_semana,
-        hora_abertura=req.hora_abertura,
-        hora_fechamento=req.hora_fechamento,
+        horarios_por_dia=horarios,
         modelo="5x2",
     )
-
-    horas = list(range(req.hora_abertura, req.hora_fechamento))
 
     def render_tabela(
         sched: ScheduleResult,
         titulo: str,
         subtitulo: str,
-        dias_op: int,
     ) -> str:
         thead_horas = "".join(f'<th class="hr">{h}h</th>' for h in horas)
         tbody_rows = ""
         for i, dia_label in enumerate(DIAS_LABEL):
             cells = ""
-            is_fechado = i >= dias_op
-            for j, _h in enumerate(horas):
-                if is_fechado:
+            horario_dia = horarios.get(i)
+            for j, h in enumerate(horas):
+                # Loja fechada nesse dia (sáb/dom toggled) OU hora fora do
+                # horário deste dia (ex: dom abre só 14h-20h, grade tem 10h-22h)
+                if (
+                    horario_dia is None
+                    or h < horario_dia[0]
+                    or h >= horario_dia[1]
+                ):
                     text = "—"
-                    color = "#f1f5f9"  # cinza claro (loja fechada)
+                    color = "#f1f5f9"
                 else:
                     fte = sched.grade[i][j]
                     text = str(fte) if fte > 0 else "0"
@@ -328,8 +340,7 @@ def _build_grade_block(req: SimulateRequest, result: SimulateResponse) -> str:
         """
 
     sub_atual = (
-        f"{req.fte_atual} FTE × 44h/sem (6x1) · shifts de 8h "
-        f"+ 1h intervalo (Art 71)"
+        f"{req.fte_atual} FTE × 44h/sem (6x1) · shifts de 8h + 1h intervalo"
     )
     sub_prop = (
         f"{float(result.fte_proposto):.1f} FTE × 40h/sem (5x2) · shifts "
@@ -349,16 +360,19 @@ def _build_grade_block(req: SimulateRequest, result: SimulateResponse) -> str:
     return f"""
     <h2>Grade de cobertura simulada (semana modelo)</h2>
     <p>
+      <strong>Horário avaliado:</strong> {horario_str}
+    </p>
+    <p>
       Alocação heurística de shifts reais — cada FTE full faz 8h corridas
       <strong>com 1h de intervalo intrajornada</strong> (CLT Art 71),
       cada meio-turno faz 4h contínuas no pico. Folgas distribuídas com
-      rotação (5x2: 2/sem; 6x1: 1/sem). <strong>Cada célula é o número
-      real de pessoas presentes naquela hora-dia</strong>.
+      rotação. <strong>Cada célula é o número real de pessoas presentes
+      naquela hora-dia</strong>.
     </p>
 
     <div class="grade-row">
-      {render_tabela(sched_atual, "Modelo atual 6x1", sub_atual, req.dias_operacao_semana)}
-      {render_tabela(sched_prop, "Modelo proposto 5x2", sub_prop, req.dias_operacao_semana)}
+      {render_tabela(sched_atual, "Modelo atual 6x1", sub_atual)}
+      {render_tabela(sched_prop, "Modelo proposto 5x2", sub_prop)}
     </div>
 
     {legenda}

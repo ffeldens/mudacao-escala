@@ -9,6 +9,7 @@ import {
   type SimulationFormData,
 } from "@/lib/schemas";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { HorariosFields } from "@/components/HorariosFields";
 
 type FormErrors<T> = Partial<Record<keyof T, string>>;
 
@@ -19,6 +20,12 @@ type FormState = {
   setor: "varejo" | "food_service" | "outros";
   hora_abertura: number;
   hora_fechamento: number;
+  hora_abertura_sabado: number | null;
+  hora_fechamento_sabado: number | null;
+  sabado_fechado: boolean;
+  hora_abertura_domingo: number | null;
+  hora_fechamento_domingo: number | null;
+  domingo_fechado: boolean;
   dias_operacao_semana: number;
   cenario: "pessimista" | "neutro" | "otimista";
   ganho_produtividade_pct: number;
@@ -34,6 +41,12 @@ const INITIAL: FormState = {
   setor: "varejo",
   hora_abertura: 10,
   hora_fechamento: 22,
+  hora_abertura_sabado: null,
+  hora_fechamento_sabado: null,
+  sabado_fechado: false,
+  hora_abertura_domingo: null,
+  hora_fechamento_domingo: null,
+  domingo_fechado: false,
   dias_operacao_semana: 7,
   cenario: "neutro",
   ganho_produtividade_pct: 5,
@@ -86,6 +99,12 @@ export function ValidadorCLTForm() {
         salario_medio: toApiDecimal(data.salario_medio),
         hora_abertura: data.hora_abertura,
         hora_fechamento: data.hora_fechamento,
+        hora_abertura_sabado: data.hora_abertura_sabado,
+        hora_fechamento_sabado: data.hora_fechamento_sabado,
+        sabado_fechado: data.sabado_fechado,
+        hora_abertura_domingo: data.hora_abertura_domingo,
+        hora_fechamento_domingo: data.hora_fechamento_domingo,
+        domingo_fechado: data.domingo_fechado,
         dias_operacao_semana: data.dias_operacao_semana,
         cenario: data.cenario,
         ganho_produtividade_pct: (data.ganho_produtividade_pct / 100).toFixed(4),
@@ -203,60 +222,6 @@ export function ValidadorCLTForm() {
           />
         </Field>
 
-        <Field
-          label={`Abertura: ${form.hora_abertura}h`}
-          hint="6h–14h"
-        >
-          <input
-            type="range"
-            min={6}
-            max={14}
-            step={1}
-            value={form.hora_abertura}
-            onChange={(e) =>
-              setForm({ ...form, hora_abertura: Number(e.target.value) })
-            }
-            className="w-full accent-mudacao-700"
-          />
-        </Field>
-
-        <Field
-          label={`Fechamento: ${form.hora_fechamento}h`}
-          hint="16h–24h"
-        >
-          <input
-            type="range"
-            min={16}
-            max={24}
-            step={1}
-            value={form.hora_fechamento}
-            onChange={(e) =>
-              setForm({ ...form, hora_fechamento: Number(e.target.value) })
-            }
-            className="w-full accent-mudacao-700"
-          />
-        </Field>
-
-        <Field
-          label={`Dias de operação/sem: ${form.dias_operacao_semana}`}
-          hint="1–7"
-        >
-          <input
-            type="range"
-            min={1}
-            max={7}
-            step={1}
-            value={form.dias_operacao_semana}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                dias_operacao_semana: Number(e.target.value),
-              })
-            }
-            className="w-full accent-mudacao-700"
-          />
-        </Field>
-
         <Field label="Cenário" error={errors.cenario}>
           <select
             className="input"
@@ -293,6 +258,24 @@ export function ValidadorCLTForm() {
             <option value="decimal">Decimal exato</option>
           </select>
         </Field>
+      </div>
+
+      {/* Horários por tipo de dia */}
+      <div>
+        <label className="label">Horário de funcionamento</label>
+        <HorariosFields
+          value={{
+            hora_abertura: form.hora_abertura,
+            hora_fechamento: form.hora_fechamento,
+            hora_abertura_sabado: form.hora_abertura_sabado,
+            hora_fechamento_sabado: form.hora_fechamento_sabado,
+            sabado_fechado: form.sabado_fechado,
+            hora_abertura_domingo: form.hora_abertura_domingo,
+            hora_fechamento_domingo: form.hora_fechamento_domingo,
+            domingo_fechado: form.domingo_fechado,
+          }}
+          onChange={(h) => setForm({ ...form, ...h })}
+        />
       </div>
 
       {serverError && (

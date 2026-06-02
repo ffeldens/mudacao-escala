@@ -47,9 +47,21 @@ export const simulationSchema = z.object({
 
   faturamento_mensal: z.string().optional().or(z.literal("")),
 
-  // Operação (com defaults)
+  // Operação (com defaults) — horário seg-sex
   hora_abertura: z.number().int().min(6).max(14).default(10),
   hora_fechamento: z.number().int().min(16).max(24).default(22),
+
+  // Sábado — null = herda dias úteis
+  hora_abertura_sabado: z.number().int().min(6).max(14).nullable().default(null),
+  hora_fechamento_sabado: z.number().int().min(16).max(24).nullable().default(null),
+  sabado_fechado: z.boolean().default(false),
+
+  // Domingo
+  hora_abertura_domingo: z.number().int().min(6).max(14).nullable().default(null),
+  hora_fechamento_domingo: z.number().int().min(16).max(24).nullable().default(null),
+  domingo_fechado: z.boolean().default(false),
+
+  // Deprecated: ainda enviado pra retrocompat com queries antigas
   dias_operacao_semana: z.number().int().min(1).max(7).default(7),
 
   // Cenário
@@ -145,6 +157,12 @@ export function buildApiPayload(sim: SimulationFormData, lead: LeadFormData) {
         : undefined,
       hora_abertura: sim.hora_abertura,
       hora_fechamento: sim.hora_fechamento,
+      hora_abertura_sabado: sim.hora_abertura_sabado,
+      hora_fechamento_sabado: sim.hora_fechamento_sabado,
+      sabado_fechado: sim.sabado_fechado,
+      hora_abertura_domingo: sim.hora_abertura_domingo,
+      hora_fechamento_domingo: sim.hora_fechamento_domingo,
+      domingo_fechado: sim.domingo_fechado,
       dias_operacao_semana: sim.dias_operacao_semana,
       cenario: sim.cenario,
       ganho_produtividade_pct: (sim.ganho_produtividade_pct / 100).toFixed(4),
