@@ -1,6 +1,6 @@
-"""Validações CLT extras — não cobertas pelo engine T&F.
+"""Validações CLT extras — não cobertas pelo engine base.
 
-O engine original avalia artigos 71/66/67 e flags T&F-specific, mas não
+O engine avalia artigos 71/66/67 e flags de regra de negócio, mas não
 verifica viabilidade matemática do quadro (FTEs × jornada vs horas
 necessárias por semana). Esses checks rodam DEPOIS do engine e enriquecem
 a lista de riscos.
@@ -21,7 +21,7 @@ def evaluate_extra_risks(
     req: SimulateRequest,
     result: SimulateResponse,
 ) -> list[dict[str, Any]]:
-    """Roda checks extras que o engine T&F não cobre.
+    """Roda checks extras que o engine base não cobre.
 
     Retorna lista de risk dicts (mesma estrutura do engine: severidade,
     artigo, titulo, descricao) prontos pra serem mesclados com os do engine.

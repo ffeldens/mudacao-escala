@@ -5,7 +5,7 @@
 #   sudo bash deploy/scripts/setup.sh
 #
 # Idempotente — pode rodar de novo sem quebrar nada.
-# Assume Ubuntu 22.04/24.04 com Caddy já rodando (T&F + outros apps já no ar).
+# Assume Ubuntu 22.04/24.04 com Caddy já rodando (outros apps já no ar).
 
 set -euo pipefail
 

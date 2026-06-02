@@ -37,7 +37,7 @@ def test_simulate_basic_payload(client):
     assert r.status_code == 200, r.text
     data = r.json()
 
-    # Aumento de folha esperado entre 8% e 14% (AC-102 do engine T&F)
+    # Aumento de folha esperado entre 5% e 20% (premissa Fitch + engine MudAção)
     delta_pct = Decimal(str(data["delta_folha_pct"]))
     assert Decimal("5") < delta_pct < Decimal("20"), f"delta_pct fora do range: {delta_pct}"
 

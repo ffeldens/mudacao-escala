@@ -210,8 +210,8 @@ def _build_engine_input(
 
 def _setor_to_brand(setor: SetorType) -> str:
     """Engine usa `brand` literal — mapeamos setor genérico pro mais próximo."""
-    # No futuro, o engine vai ter brand="generic_retail" e "food_service".
-    # Por ora, todos caem em "tfc" (regras mais permissivas que T&F).
+    # No futuro, o engine vai expor brand="generic_retail" e "food_service".
+    # Por ora, todos caem em "tfc" (regras genéricas mais permissivas).
     return "tfc"
 
 

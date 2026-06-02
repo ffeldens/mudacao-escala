@@ -1,6 +1,6 @@
 # Deploy — MudAção Escala Freemium
 
-Guia de deploy na VPS Hostinger (mesma do T&F Escala, processos isolados).
+Guia de deploy na VPS Hostinger (compartilhada com outros apps, processos isolados).
 
 ## Portas dos apps na VPS
 
@@ -10,7 +10,7 @@ Guia de deploy na VPS Hostinger (mesma do T&F Escala, processos isolados).
 | gtp | 8001 | gtp.mudacao.com.br |
 | intel | 8002 | intel.mudacao.com.br |
 | upload | 8003 | upload.mudacao.com.br |
-| T&F Escala (privado) | 8010 | escala.mudacao.com.br |
+| App privado interno | 8010 | escala.mudacao.com.br |
 | **Escala Freemium API** | **8012** | (loopback) |
 | **Escala Freemium Web** | **8011** | **simulaescala.mudacao.com.br** |
 
@@ -23,7 +23,7 @@ Antes de começar:
 - [ ] Repo no GitHub atualizado (`git push` de todos os commits locais)
 - [ ] DNS adicionado: `simulaescala.mudacao.com.br` → `31.97.163.175` (A record na Hostinger)
 - [ ] Resend: API key válida + (opcional) domínio `mudacao.com.br` validado
-- [ ] Connection string do Supabase em mãos (a mesma do T&F, schema `freemium` será criado automaticamente)
+- [ ] Connection string do Supabase em mãos (schema `freemium` será criado automaticamente)
 
 > Aguarde 1-5 min após criar o DNS antes de fazer o deploy — o Caddy precisa resolver o domínio pra emitir o cert Let's Encrypt.
 

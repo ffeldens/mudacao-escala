@@ -10,7 +10,7 @@ Simulador gratuito de impacto da PEC 8/2025 (transição 6x1 → 5x2) para varej
 |---|---|
 | Frontend | Next.js 14 (App Router) + Tailwind + shadcn/ui |
 | API | FastAPI + psycopg |
-| Engine | Python (reaproveitado do T&F Escala) |
+| Engine | Python (motor de cálculo proprietário MudAção) |
 | DB | Supabase (Postgres, schema `freemium`) |
 | Auth | Supabase Auth (magic link) — só pra tier pago |
 | Email | Resend (DKIM já configurado em mudacao.com.br) |
@@ -42,7 +42,7 @@ Supabase Postgres (schema "freemium")
 │   ├── web/                 ← Next.js 14 (landing + simulador + pricing)
 │   └── api/                 ← FastAPI engine wrapper
 ├── packages/
-│   └── engine/              ← Python engine (cópia do T&F Escala)
+│   └── engine/              ← Python engine (motor de cálculo MudAção)
 ├── deploy/                  ← Caddyfile snippet, systemd, scripts
 └── README.md
 ```

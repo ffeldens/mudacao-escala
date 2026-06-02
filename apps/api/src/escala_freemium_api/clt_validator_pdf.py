@@ -367,9 +367,9 @@ def _build_grade_block(req: SimulateRequest, result: SimulateResponse) -> str:
       <strong>⚠️ Esta é uma alocação heurística</strong>, não otimização real.
       Distribui shifts em 2 patterns (manhã/tarde) com folgas rotativas,
       mas <strong>não considera</strong> demanda histórica por hora,
-      restrições por função (comissionistas T&F) nem absenteísmo.
-      Pra escala otimizada com dados reais da operação, use o
-      <em>Planejador Automático</em> do plano Pro.
+      restrições específicas por função (comissionistas, líderes, caixas)
+      nem absenteísmo. Pra escala otimizada com dados reais da operação,
+      use o <em>Planejador Automático</em> do plano Pro.
     </div>
     """
 

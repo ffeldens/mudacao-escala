@@ -1,8 +1,8 @@
 """Conexão com Postgres (Supabase) — schema `freemium`.
 
-Padrão dual SQLite/Postgres herdado do T&F, mas no freemium **sempre** usamos
-Postgres (Supabase). SQLite fica como fallback se DATABASE_URL não estiver
-preenchida — útil pra dev sem Supabase.
+Padrão dual SQLite/Postgres. Em produção sempre Postgres (Supabase).
+SQLite fica como fallback se DATABASE_URL não estiver preenchida —
+útil pra dev local sem Supabase.
 """
 
 from __future__ import annotations

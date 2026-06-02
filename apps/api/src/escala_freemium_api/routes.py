@@ -297,7 +297,7 @@ async def validate_clt(
         logger.exception("Falha simulação no validador CLT")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    # Riscos do engine (artigos 71/66/67 + flags T&F)
+    # Riscos do engine (artigos 71/66/67 + flags de negócio)
     from engine.core import simulate as engine_simulate  # noqa: PLC0415
     from escala_freemium_api.simulation_adapter import (
         _build_engine_input,  # noqa: PLC0415
