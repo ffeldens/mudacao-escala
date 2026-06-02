@@ -577,22 +577,21 @@ def _css() -> str:
     text-align: center;
   }
 
-  /* ===== Grade de cobertura teórica ===== */
+  /* ===== Grade de cobertura — empilhadas verticalmente pra caber em A4 ===== */
   .grade-row {
-    display: table;
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 8pt;
-    margin: 0 -8pt 8pt;
+    display: block;
+    margin: 0 0 8pt;
   }
   .grade-card {
-    display: table-cell;
-    width: 50%;
+    display: block;
+    width: 100%;
     vertical-align: top;
     background: #f8fafc;
     border: 1pt solid #e2e8f0;
     border-radius: 6pt;
-    padding: 10pt;
+    padding: 8pt 10pt;
+    margin: 0 0 8pt;
+    box-sizing: border-box;
   }
   .grade-card h3 {
     color: #0a4a3a;
@@ -609,24 +608,28 @@ def _css() -> str:
   .grade-card .grade-extra {
     color: #475569;
     font-size: 9pt;
-    margin: 0 0 8pt;
+    margin: 0 0 6pt;
   }
   table.grade {
     width: 100%;
     border-collapse: collapse;
-    font-size: 7pt;
+    font-size: 8pt;
+    table-layout: fixed;
   }
   table.grade th, table.grade td {
     border: 0.5pt solid #cbd5e1;
-    padding: 3pt 2pt;
+    padding: 3pt 1pt;
     text-align: center;
     font-weight: 500;
+    overflow: hidden;
   }
-  table.grade th.dia-h { width: 22pt; }
+  table.grade th.dia-h, table.grade th.dia {
+    width: 28pt;
+  }
   table.grade th.hr {
     background: #0a4a3a;
     color: #fff;
-    font-size: 7pt;
+    font-size: 7.5pt;
     font-weight: 600;
   }
   table.grade th.dia {
