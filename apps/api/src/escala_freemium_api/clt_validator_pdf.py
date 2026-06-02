@@ -102,6 +102,9 @@ def _build_html(
     n_warn = sum(1 for r in risks if r.get("severidade") == "warn")
     n_bad = sum(1 for r in risks if r.get("severidade") == "bad")
 
+    # Grade de cobertura teórica (atual vs proposto)
+    grade_block = _build_grade_block(req, result)
+
     return f"""\
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -173,6 +176,9 @@ def _build_html(
   <h2>Avaliação por artigo</h2>
   {risk_rows}
 
+  <!-- ========== GRADE DE COBERTURA TEÓRICA ========== -->
+  {grade_block}
+
   <!-- ========== RECOMENDAÇÕES ========== -->
   <h2>Recomendações gerais</h2>
   <ul>
@@ -214,6 +220,162 @@ def _build_html(
 </body>
 </html>
 """
+
+
+DIAS_LABEL = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+
+
+def _calcular_grade_cobertura(
+    fte_count: float,
+    jornada_h: float,
+    hora_abertura: int,
+    hora_fechamento: int,
+    dias_op: int,
+) -> list[list[float]]:
+    """Distribui FTE-horas pelos slots da semana com pesos de pico.
+
+    Lógica: cada slot (dia × hora) recebe um peso (1.0 base, 1.3 em
+    sex/sáb/dom, 1.2 em 14h-21h, multiplicativo). Soma normalizada
+    bate com fte_count × jornada_h.
+
+    Returns:
+        Matriz [7 dias][horas_de_operacao] com FTEs presentes (float)
+    """
+    horas_dia = hora_fechamento - hora_abertura
+    if horas_dia <= 0 or dias_op <= 0:
+        return [[0.0] * max(1, horas_dia) for _ in range(7)]
+
+    fte_horas_disp = fte_count * jornada_h
+
+    pesos: list[list[float]] = []
+    for dia in range(7):
+        linha = []
+        ativo = dia < dias_op
+        for h in range(hora_abertura, hora_fechamento):
+            if not ativo:
+                linha.append(0.0)
+                continue
+            peso = 1.0
+            if dia >= 4:  # sex, sáb, dom
+                peso *= 1.3
+            if 14 <= h < 21:  # pico
+                peso *= 1.2
+            linha.append(peso)
+        pesos.append(linha)
+
+    soma = sum(sum(linha) for linha in pesos)
+    if soma == 0:
+        return pesos
+    fator = fte_horas_disp / soma
+    return [[p * fator for p in linha] for linha in pesos]
+
+
+def _color_for_fte(fte: float, min_required: float = 1.0) -> str:
+    """Retorna cor de fundo baseado em quantos FTEs estão presentes.
+
+    < min_required → vermelho (sub-cobertura)
+    = min_required (até 1.5x) → amarelo (apertado)
+    1.5x a 3x → verde claro
+    > 3x → verde escuro
+    """
+    if fte == 0:
+        return "#f1f5f9"  # cinza claro (fechado)
+    if fte < min_required:
+        return "#fee2e2"  # red-100
+    if fte < min_required * 1.5:
+        return "#fef3c7"  # amber-100
+    if fte < min_required * 3:
+        return "#dbeee4"  # mudacao verde claro
+    return "#b8dcc8"  # mudacao verde mais escuro
+
+
+def _build_grade_block(req: SimulateRequest, result: SimulateResponse) -> str:
+    horas_dia = req.hora_fechamento - req.hora_abertura
+    if horas_dia <= 0:
+        return ""
+
+    grade_atual = _calcular_grade_cobertura(
+        fte_count=req.fte_atual,
+        jornada_h=44,  # 6x1
+        hora_abertura=req.hora_abertura,
+        hora_fechamento=req.hora_fechamento,
+        dias_op=req.dias_operacao_semana,
+    )
+    grade_prop = _calcular_grade_cobertura(
+        fte_count=float(result.fte_proposto),
+        jornada_h=40,  # 5x2
+        hora_abertura=req.hora_abertura,
+        hora_fechamento=req.hora_fechamento,
+        dias_op=req.dias_operacao_semana,
+    )
+
+    horas = list(range(req.hora_abertura, req.hora_fechamento))
+
+    def render_tabela(grade: list[list[float]], titulo: str, subtitulo: str) -> str:
+        # Cabeçalho de horas
+        thead_horas = "".join(
+            f'<th class="hr">{h}h</th>' for h in horas
+        )
+        tbody_rows = ""
+        for i, dia_label in enumerate(DIAS_LABEL):
+            cells = ""
+            for j, h in enumerate(horas):
+                fte = grade[i][j]
+                color = _color_for_fte(fte)
+                text = f"{fte:.1f}" if fte > 0 else "—"
+                cells += (
+                    f'<td class="slot" style="background:{color};">{text}</td>'
+                )
+            tbody_rows += f"<tr><th class='dia'>{dia_label}</th>{cells}</tr>"
+
+        return f"""
+        <div class="grade-card">
+          <h3>{titulo}</h3>
+          <p class="grade-sub">{subtitulo}</p>
+          <table class="grade">
+            <thead>
+              <tr><th class="dia-h"></th>{thead_horas}</tr>
+            </thead>
+            <tbody>{tbody_rows}</tbody>
+          </table>
+        </div>
+        """
+
+    sub_atual = f"{req.fte_atual} FTE × 44h/sem (6x1)"
+    sub_prop = f"{float(result.fte_proposto):.1f} FTE × 40h/sem (5x2)"
+
+    legenda = """
+    <div class="grade-legend">
+      <span class="lg-item"><span class="sw" style="background:#fee2e2;"></span> &lt; 1 FTE (sub-cobertura)</span>
+      <span class="lg-item"><span class="sw" style="background:#fef3c7;"></span> 1–1.5 FTE (apertado)</span>
+      <span class="lg-item"><span class="sw" style="background:#dbeee4;"></span> 1.5–3 FTE (ok)</span>
+      <span class="lg-item"><span class="sw" style="background:#b8dcc8;"></span> 3+ FTE (folgado)</span>
+      <span class="lg-item"><span class="sw" style="background:#f1f5f9;"></span> Fechado</span>
+    </div>
+    """
+
+    return f"""
+    <h2>Grade de cobertura teórica (semana modelo)</h2>
+    <p>
+      Distribuição teórica de FTE × hora × dia, com peso de pico em
+      sex/sáb/dom e horário 14h–21h. <strong>Cada célula é o número
+      esperado de pessoas trabalhando naquela hora-dia</strong>.
+    </p>
+
+    <div class="grade-row">
+      {render_tabela(grade_atual, "Modelo atual 6x1", sub_atual)}
+      {render_tabela(grade_prop, "Modelo proposto 5x2", sub_prop)}
+    </div>
+
+    {legenda}
+
+    <div class="grade-disclaimer">
+      <strong>⚠️ Isto é uma distribuição teórica</strong>, não uma escala
+      operacional. Pra escala real otimizada respeitando absenteísmo, picos
+      históricos, comissionistas e restrições por função, use o
+      <em>Planejador Automático</em> do plano Pro.
+    </div>
+    """
 
 
 def _build_risk_rows(risks: list[dict[str, Any]]) -> str:
@@ -403,6 +565,94 @@ def _css() -> str:
     color: #94a3b8;
     font-size: 9pt;
     text-align: center;
+  }
+
+  /* ===== Grade de cobertura teórica ===== */
+  .grade-row {
+    display: table;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 8pt;
+    margin: 0 -8pt 8pt;
+  }
+  .grade-card {
+    display: table-cell;
+    width: 50%;
+    vertical-align: top;
+    background: #f8fafc;
+    border: 1pt solid #e2e8f0;
+    border-radius: 6pt;
+    padding: 10pt;
+  }
+  .grade-card h3 {
+    color: #0a4a3a;
+    font-size: 11pt;
+    margin: 0 0 2pt;
+    border: none;
+    padding: 0;
+  }
+  .grade-card .grade-sub {
+    color: #64748b;
+    font-size: 8pt;
+    margin: 0 0 8pt;
+  }
+  table.grade {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 7pt;
+  }
+  table.grade th, table.grade td {
+    border: 0.5pt solid #cbd5e1;
+    padding: 3pt 2pt;
+    text-align: center;
+    font-weight: 500;
+  }
+  table.grade th.dia-h { width: 22pt; }
+  table.grade th.hr {
+    background: #0a4a3a;
+    color: #fff;
+    font-size: 7pt;
+    font-weight: 600;
+  }
+  table.grade th.dia {
+    background: #0a4a3a;
+    color: #fff;
+    font-size: 8pt;
+    font-weight: 600;
+    text-align: center;
+  }
+  table.grade td.slot {
+    color: #1a1a1a;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .grade-legend {
+    display: block;
+    margin: 8pt 0 8pt;
+    font-size: 9pt;
+    color: #475569;
+  }
+  .grade-legend .lg-item {
+    display: inline-block;
+    margin-right: 12pt;
+    line-height: 1.6;
+  }
+  .grade-legend .sw {
+    display: inline-block;
+    width: 10pt;
+    height: 10pt;
+    border: 0.5pt solid #cbd5e1;
+    vertical-align: middle;
+    margin-right: 3pt;
+  }
+  .grade-disclaimer {
+    background: #fef3c7;
+    border-left: 4pt solid #b45309;
+    padding: 10pt 14pt;
+    margin: 10pt 0 16pt;
+    font-size: 10pt;
+    color: #78350f;
+    border-radius: 0 4pt 4pt 0;
   }
 </style>
 """
