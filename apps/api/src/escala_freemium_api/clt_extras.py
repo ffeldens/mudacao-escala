@@ -181,8 +181,17 @@ def evaluate_extra_risks(
 
     # =========================================================================
     # 3.5. Slots descobertos pela alocação real de shifts (Validador 2.0)
+    # Avalia AS DUAS grades (atual 6x1 + proposto 5x2) — gera risk separado
+    # pra cada uma porque o user pode estar vendo vermelhos em qualquer das duas.
     # =========================================================================
     horarios = {d: get_horario_dia(req, d) for d in range(7)}
+
+    sched_atual = build_schedule_from_horarios(
+        fte_count=float(req.fte_atual),
+        arredondamento_mode=req.arredondamento_fte,
+        horarios_por_dia=horarios,
+        modelo="6x1",
+    )
     sched_prop = build_schedule_from_horarios(
         fte_count=float(result.fte_proposto),
         arredondamento_mode=req.arredondamento_fte,
@@ -190,31 +199,39 @@ def evaluate_extra_risks(
         modelo="5x2",
     )
 
-    if sched_prop.slots_descobertos > 0 and sched_prop.slots_total > 0:
-        pct_descoberto = (
-            sched_prop.slots_descobertos / sched_prop.slots_total * 100
-        )
-        severidade = "bad" if pct_descoberto > 10 else "warn"
-        risks.append(
-            {
-                "severidade": severidade,
-                "artigo": "Cobertura simulada (Validador 2.0)",
-                "titulo": (
-                    f"{sched_prop.slots_descobertos} slots sem nenhum FTE "
-                    f"na semana modelo (5x2)"
-                ),
-                "descricao": (
-                    f"Distribuindo {sched_prop.fte_full_count} FTE(s) full e "
-                    f"{sched_prop.fte_meio_count} meio-turno(s) com shifts "
-                    f"reais (8h + 1h intervalo), sobram "
-                    f"{sched_prop.slots_descobertos}h/semana sem ninguém na "
-                    f"loja ({pct_descoberto:.0f}% do tempo de operação). "
-                    f"Veja a grade no relatório — slots em vermelho. "
-                    f"Solução: aumentar o quadro OU usar Planejador Pro pra "
-                    f"otimizar a distribuição."
-                ),
-            }
-        )
+    def _risk_gap(
+        sched: object, modelo_label: str, jornada: str
+    ) -> dict[str, Any] | None:
+        if sched.slots_descobertos == 0 or sched.slots_total == 0:
+            return None
+        pct = sched.slots_descobertos / sched.slots_total * 100
+        severidade = "bad" if pct > 10 else "warn"
+        return {
+            "severidade": severidade,
+            "artigo": f"Cobertura simulada ({modelo_label})",
+            "titulo": (
+                f"{sched.slots_descobertos} slots sem nenhum FTE na grade "
+                f"do {modelo_label}"
+            ),
+            "descricao": (
+                f"Distribuindo {sched.fte_full_count} FTE(s) full + "
+                f"{sched.fte_meio_count} meio-turno(s) com shifts reais "
+                f"({jornada}), sobram {sched.slots_descobertos}h/semana sem "
+                f"ninguém na loja ({pct:.0f}% do tempo de operação). "
+                f"Veja a grade do {modelo_label} no relatório — células em "
+                f"vermelho são esses gaps. "
+                f"⚠️ Isso pode acontecer mesmo com cobertura agregada OK — a "
+                f"heurística aloca FTEs em 2 patterns (manhã/tarde), e "
+                f"horários extremos ou de transição podem ficar descobertos. "
+                f"Numa escala REAL otimizada (Planejador Pro), esses gaps "
+                f"desaparecem com alocação inteligente."
+            ),
+        }
+
+    if (r := _risk_gap(sched_atual, "modelo atual 6x1", "8h + 1h intervalo")):
+        risks.append(r)
+    if (r := _risk_gap(sched_prop, "modelo proposto 5x2", "8h + 1h intervalo + meio-turno")):
+        risks.append(r)
 
     # =========================================================================
     # 4. Operação noturna sem adicional
