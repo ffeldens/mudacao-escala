@@ -101,6 +101,28 @@ Faça uma simulação real com seu email pra confirmar:
 - ✅ Email do lead chega
 - ✅ Email admin notification chega
 
+### 5. Custom SMTP + Templates Supabase Auth (one-time)
+
+Por padrão, o Supabase manda os emails de auth (magic link, recovery, etc)
+pelo SMTP built-in deles — com sender `noreply@mail.app.supabase.io`,
+template genérico e rate limit baixo. Pra produção real:
+
+1. **Configura SMTP custom do Resend** no Supabase Dashboard
+2. **Cola os templates HTML** brandados MudAção em cada tipo de email
+
+Guia passo-a-passo + 5 templates prontos pra colar:
+**[`supabase-auth-templates/README.md`](./supabase-auth-templates/README.md)**
+
+Templates inclusos:
+- `magic-link.html` — login sem senha (fluxo principal)
+- `confirmation.html` — signup confirmation
+- `recovery.html` — esqueci minha senha
+- `email-change.html` — troca de email
+- `invite.html` — convite (futuro: admin convidando time)
+
+> Depois de configurar: testa numa janela anônima → email vem de
+> `noreply@mudacao.com.br`, com visual MudAção, DKIM passando.
+
 ---
 
 ## Updates subsequentes
