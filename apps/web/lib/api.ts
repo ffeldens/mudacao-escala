@@ -153,3 +153,130 @@ export async function getMySimulation(
   }
   return r.json();
 }
+
+// =============================================================================
+// Export Excel (Sprint 3 #4)
+// =============================================================================
+
+/**
+ * Baixa .xlsx multi-aba de uma simulação salva (histórico).
+ * Dispara o download direto no navegador.
+ */
+export async function downloadExcelFromHistory(
+  accessToken: string,
+  simulationId: string,
+): Promise<void> {
+  const r = await fetch(
+    `/api/me/simulations/${simulationId}/export-excel`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!r.ok) {
+    let msg = `Falha ao exportar: ${r.status}`;
+    try {
+      const j = await r.json();
+      if (j.detail) msg = j.detail;
+    } catch {
+      /* ignora */
+    }
+    throw new Error(msg);
+  }
+  await _downloadBlob(r, `simulacao-${simulationId.slice(0, 8)}.xlsx`);
+}
+
+/**
+ * Baixa .xlsx multi-aba enviando um SimulateRequest completo
+ * (pra fluxo pós-simulação sem ter ID salvo).
+ */
+export async function downloadExcelFromRequest(
+  accessToken: string,
+  payload: SimulateRequest,
+): Promise<void> {
+  const r = await fetch("/api/me/export-excel", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) {
+    let msg = `Falha ao exportar: ${r.status}`;
+    try {
+      const j = await r.json();
+      if (j.detail) msg = j.detail;
+    } catch {
+      /* ignora */
+    }
+    throw new Error(msg);
+  }
+  await _downloadBlob(r, "simulacao.xlsx");
+}
+
+// =============================================================================
+// Avaliação de rede via CSV (Sprint 3 #4)
+// =============================================================================
+
+/** Baixa o template CSV (3 linhas-exemplo + header). */
+export async function downloadBatchCsvTemplate(accessToken: string): Promise<void> {
+  const r = await fetch("/api/me/batch-csv/template", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) {
+    throw new Error(`Falha ao baixar template: ${r.status}`);
+  }
+  await _downloadBlob(r, "template-avaliacao-rede.csv");
+}
+
+/**
+ * Faz upload do CSV multi-loja e baixa o .xlsx consolidado retornado.
+ * Síncrono — pode levar até ~10s pra 50 lojas.
+ */
+export async function uploadBatchCsv(
+  accessToken: string,
+  file: File,
+): Promise<void> {
+  const form = new FormData();
+  form.append("file", file);
+
+  const r = await fetch("/api/me/batch-csv", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  if (!r.ok) {
+    let msg = `Falha no batch: ${r.status}`;
+    try {
+      const j = await r.json();
+      if (j.detail) msg = j.detail;
+    } catch {
+      /* ignora */
+    }
+    throw new Error(msg);
+  }
+  const fileName =
+    _extractFilename(r) ?? `avaliacao-rede-${Date.now()}.xlsx`;
+  await _downloadBlob(r, fileName);
+}
+
+// =============================================================================
+// Helpers internos
+// =============================================================================
+
+async function _downloadBlob(r: Response, fallbackName: string): Promise<void> {
+  const blob = await r.blob();
+  const fileName = _extractFilename(r) ?? fallbackName;
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+function _extractFilename(r: Response): string | null {
+  const cd = r.headers.get("Content-Disposition") || "";
+  const m = cd.match(/filename="([^"]+)"/);
+  return m ? m[1] : null;
+}

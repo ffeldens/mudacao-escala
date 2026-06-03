@@ -6,7 +6,7 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -23,6 +23,14 @@ from escala_freemium_api.email_sender import (
 )
 from escala_freemium_api.clt_extras import evaluate_extra_risks, merge_risks
 from escala_freemium_api.clt_validator_pdf import render_clt_validator_pdf
+from escala_freemium_api.csv_batch import (
+    BATCH_CSV_TEMPLATE,
+    BatchCsvError,
+    BatchRowError,
+    parse_batch_csv,
+    run_batch,
+)
+from escala_freemium_api.excel_export import build_batch_xlsx, build_single_xlsx
 from escala_freemium_api.pdf import render_simulation_pdf
 from escala_freemium_api.schemas import (
     CheckoutSessionRequest,
@@ -371,6 +379,233 @@ async def get_my_simulation(
 
     # outputs já está no formato SimulateResponse (serializado)
     return SimulateResponse(**sim.outputs)
+
+
+# =============================================================================
+# Export Excel — single (Sprint 3 #4)
+# =============================================================================
+
+
+_XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@router.post(
+    "/me/export-excel",
+    tags=["simulator"],
+    responses={200: {"content": {_XLSX_MEDIA: {}}, "description": ".xlsx multi-aba"}},
+)
+async def export_excel(
+    req: SimulateRequest,
+    user: CurrentUser,
+    db: DbSession,
+) -> Response:
+    """Roda simulação + valida CLT + retorna .xlsx multi-aba.
+
+    Paywalled Starter+. Mesmo payload do /simulate, retorna .xlsx em vez de JSON.
+    """
+    profile = _require_paid_plan(user, db)
+    custom_financial = _build_custom_financial(profile)
+
+    try:
+        result = run_simulation(req, custom_financial=custom_financial)
+    except Exception as e:
+        logger.exception("Falha simulação export-excel")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # Riscos CLT (mesma lógica do validate-clt — reaproveita engine + extras)
+    clt_risks: list[dict] = []
+    try:
+        from engine.core import simulate as engine_simulate  # noqa: PLC0415
+        from escala_freemium_api.simulation_adapter import (
+            _build_engine_input,  # noqa: PLC0415
+        )
+
+        engine_input = _build_engine_input(req, custom_financial=custom_financial)
+        engine_out = engine_simulate(engine_input)
+        engine_risks = [r.model_dump(mode="json") for r in engine_out.riscos_clt]
+        extra_risks = evaluate_extra_risks(req, result)
+        clt_risks = merge_risks(engine_risks, extra_risks)
+    except Exception:
+        logger.exception("Falha CLT no export-excel — gerando sem aba de riscos")
+
+    try:
+        xlsx_bytes = build_single_xlsx(
+            req=req,
+            result=result,
+            user_nome=profile.nome,
+            user_empresa=profile.empresa,
+            clt_risks=clt_risks or None,
+        )
+    except Exception as e:
+        logger.exception("Falha ao gerar .xlsx")
+        raise HTTPException(status_code=500, detail=f"Falha ao gerar Excel: {e}") from e
+
+    filename = f"simulacao-{result.inputs_hash}.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type=_XLSX_MEDIA,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/me/simulations/{simulation_id}/export-excel",
+    tags=["simulator"],
+    responses={200: {"content": {_XLSX_MEDIA: {}}, "description": ".xlsx multi-aba"}},
+)
+async def export_excel_from_history(
+    simulation_id: str,
+    user: CurrentUser,
+    db: DbSession,
+) -> Response:
+    """Exporta .xlsx de uma simulação salva no histórico.
+
+    Reaproveita inputs persistidos + recalcula riscos CLT (snapshot fiel).
+    """
+    profile = _require_paid_plan(user, db)
+
+    try:
+        sim_uuid = UUID(simulation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="ID inválido") from e
+
+    sim = db.get(Simulation, sim_uuid)
+    if not sim or str(sim.user_id) != user.id:
+        raise HTTPException(status_code=404, detail="Simulação não encontrada")
+
+    if not isinstance(sim.inputs, dict) or not isinstance(sim.outputs, dict):
+        raise HTTPException(status_code=500, detail="Dados da simulação corrompidos")
+
+    try:
+        req = SimulateRequest(**sim.inputs)
+        result = SimulateResponse(**sim.outputs)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Inputs/outputs inválidos: {e}") from e
+
+    # Re-avalia riscos CLT (sempre fresh — régua pode ter sido atualizada)
+    clt_risks: list[dict] = []
+    try:
+        from engine.core import simulate as engine_simulate  # noqa: PLC0415
+        from escala_freemium_api.simulation_adapter import (
+            _build_engine_input,  # noqa: PLC0415
+        )
+
+        custom_financial = _build_custom_financial(profile)
+        engine_input = _build_engine_input(req, custom_financial=custom_financial)
+        engine_out = engine_simulate(engine_input)
+        engine_risks = [r.model_dump(mode="json") for r in engine_out.riscos_clt]
+        extra_risks = evaluate_extra_risks(req, result)
+        clt_risks = merge_risks(engine_risks, extra_risks)
+    except Exception:
+        logger.exception("Falha CLT no export-excel histórico")
+
+    try:
+        xlsx_bytes = build_single_xlsx(
+            req=req,
+            result=result,
+            user_nome=profile.nome,
+            user_empresa=profile.empresa,
+            clt_risks=clt_risks or None,
+        )
+    except Exception as e:
+        logger.exception("Falha ao gerar .xlsx histórico")
+        raise HTTPException(status_code=500, detail=f"Falha ao gerar Excel: {e}") from e
+
+    filename = f"simulacao-{result.inputs_hash}.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type=_XLSX_MEDIA,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# =============================================================================
+# Batch CSV — upload N lojas → .xlsx consolidado (Sprint 3 #4)
+# =============================================================================
+
+
+@router.get("/me/batch-csv/template", tags=["simulator"])
+async def batch_csv_template(user: CurrentUser, db: DbSession) -> Response:
+    """Baixa um CSV de exemplo com colunas obrigatórias + 3 linhas-modelo."""
+    _require_paid_plan(user, db)
+    return Response(
+        content=BATCH_CSV_TEMPLATE,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="template-avaliacao-rede.csv"',
+        },
+    )
+
+
+@router.post(
+    "/me/batch-csv",
+    tags=["simulator"],
+    responses={200: {"content": {_XLSX_MEDIA: {}}, "description": ".xlsx consolidado"}},
+)
+async def batch_csv_upload(
+    user: CurrentUser,
+    db: DbSession,
+    file: UploadFile = File(...),
+) -> Response:
+    """Recebe CSV multi-loja, roda batch, devolve .xlsx consolidado.
+
+    Síncrono — limite MAX_LOJAS_POR_UPLOAD lojas por upload pra evitar timeout.
+    Paywalled Starter+.
+    """
+    profile = _require_paid_plan(user, db)
+
+    # Lê o arquivo (limite ~1 MB pra evitar abuse — CSV de 50 lojas é < 10 kB)
+    content = await file.read()
+    if len(content) > 1_000_000:
+        raise HTTPException(status_code=413, detail="Arquivo grande demais (>1 MB)")
+    if not content:
+        raise HTTPException(status_code=400, detail="Arquivo vazio")
+
+    try:
+        requests = parse_batch_csv(content)
+    except BatchCsvError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except BatchRowError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    custom_financial = _build_custom_financial(profile)
+
+    try:
+        results = run_batch(requests, custom_financial=custom_financial)
+    except BatchRowError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # Persiste cada simulação no histórico (audit trail)
+    for _label, req, result in results:
+        sim = Simulation(
+            user_id=UUID(user.id),
+            nome_loja=req.nome_loja,
+            inputs_hash=result.inputs_hash,
+            inputs=req.model_dump(mode="json"),
+            outputs=result.model_dump(mode="json"),
+            n_lojas_extrapolacao=req.n_lojas_rede,
+            delta_folha_pct=result.delta_folha_pct,
+            economia_estimada_mes=result.economia_potencial_wfm,
+        )
+        db.add(sim)
+    db.commit()
+
+    try:
+        xlsx_bytes = build_batch_xlsx(
+            results,
+            user_nome=profile.nome,
+            user_empresa=profile.empresa,
+        )
+    except Exception as e:
+        logger.exception("Falha ao gerar .xlsx batch")
+        raise HTTPException(status_code=500, detail=f"Falha ao gerar Excel: {e}") from e
+
+    filename = f"avaliacao-rede-{len(results)}-lojas.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type=_XLSX_MEDIA,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # =============================================================================

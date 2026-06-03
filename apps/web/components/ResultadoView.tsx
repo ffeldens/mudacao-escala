@@ -14,8 +14,12 @@ import {
   Loader2,
 } from "lucide-react";
 
-import type { SimulateResponse } from "@/lib/api";
-import { getMySimulation } from "@/lib/api";
+import type { SimulateRequest, SimulateResponse } from "@/lib/api";
+import {
+  downloadExcelFromHistory,
+  downloadExcelFromRequest,
+  getMySimulation,
+} from "@/lib/api";
 import { brl } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ScenarioChart } from "@/components/charts/ScenarioChart";
@@ -32,6 +36,7 @@ export function ResultadoView() {
   const simId = searchParams.get("id");
 
   const [data, setData] = useState<StoredResult | null>(null);
+  const [storedRequest, setStoredRequest] = useState<SimulateRequest | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -63,6 +68,8 @@ export function ResultadoView() {
       try {
         const raw = sessionStorage.getItem("mudacao_simulacao_resultado");
         if (raw && !canceled) setData(JSON.parse(raw));
+        const rawReq = sessionStorage.getItem("mudacao_simulacao_request");
+        if (rawReq && !canceled) setStoredRequest(JSON.parse(rawReq));
       } catch {
         // ignora
       }
@@ -213,6 +220,9 @@ export function ResultadoView() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {(simId || storedRequest) && (
+            <ExportExcelButton simId={simId} request={storedRequest} />
+          )}
           <ShareButton headline={data.headline} />
           <Link
             href="/simulador"
@@ -240,6 +250,69 @@ function FeatureLi({ text }: { text: string }) {
         ✓
       </span>
       {text}
+    </div>
+  );
+}
+
+function ExportExcelButton({
+  simId,
+  request,
+}: {
+  simId: string | null;
+  request: SimulateRequest | null;
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleClick() {
+    setError(null);
+    setDownloading(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        setError("Faça login pra exportar (recurso Starter+)");
+        return;
+      }
+      if (simId) {
+        await downloadExcelFromHistory(session.access_token, simId);
+      } else if (request) {
+        await downloadExcelFromRequest(session.access_token, request);
+      } else {
+        setError("Dados da simulação indisponíveis");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        onClick={handleClick}
+        disabled={downloading}
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-mudacao-300 hover:bg-mudacao-50 hover:text-mudacao-900 disabled:opacity-50"
+      >
+        {downloading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" /> Gerando…
+          </>
+        ) : (
+          <>
+            <Download className="h-4 w-4" /> Baixar Excel
+          </>
+        )}
+      </button>
+      {error && (
+        <span className="text-xs text-red-600" title={error}>
+          {error.length > 40 ? error.slice(0, 40) + "…" : error}
+        </span>
+      )}
     </div>
   );
 }

@@ -9,10 +9,12 @@ import {
   TrendingUp,
   Calendar,
   ArrowRight,
+  Download,
 } from "lucide-react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
+  downloadExcelFromHistory,
   listMySimulations,
   type SimulationHistoryItem,
 } from "@/lib/api";
@@ -99,6 +101,9 @@ export function HistoricoList() {
 }
 
 function SimulationRow({ sim }: { sim: SimulationHistoryItem }) {
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const date = sim.created_at
     ? new Date(sim.created_at).toLocaleDateString("pt-BR", {
         day: "2-digit",
@@ -113,38 +118,86 @@ function SimulationRow({ sim }: { sim: SimulationHistoryItem }) {
     ? pct(parseFloat(sim.delta_folha_pct))
     : "—";
 
+  async function handleExportExcel(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setError(null);
+    setDownloading(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        setError("Sessão expirada");
+        return;
+      }
+      await downloadExcelFromHistory(session.access_token, sim.id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
-    <Link
-      href={`/simulador/resultado?id=${sim.id}`}
-      className="block rounded-xl border border-slate-200 bg-white p-5 transition hover:border-mudacao-300 hover:shadow-sm"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-mudacao-950">
-            {sim.nome_loja || `Simulação`}
-          </p>
-          {sim.headline && (
-            <p className="mt-1 line-clamp-2 text-sm text-slate-600">
-              {sim.headline}
+    <div className="rounded-xl border border-slate-200 bg-white transition hover:border-mudacao-300 hover:shadow-sm">
+      <Link
+        href={`/simulador/resultado?id=${sim.id}`}
+        className="block p-5"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-mudacao-950">
+              {sim.nome_loja || `Simulação`}
             </p>
-          )}
+            {sim.headline && (
+              <p className="mt-1 line-clamp-2 text-sm text-slate-600">
+                {sim.headline}
+              </p>
+            )}
 
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1">
-              <Calendar className="h-3 w-3" /> {date}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <Building2 className="h-3 w-3" /> {sim.n_lojas}{" "}
-              {sim.n_lojas === 1 ? "loja" : "lojas"}
-            </span>
-            <span className="inline-flex items-center gap-1 font-semibold text-mudacao-700">
-              <TrendingUp className="h-3 w-3" /> +{delta}
-            </span>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="h-3 w-3" /> {date}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Building2 className="h-3 w-3" /> {sim.n_lojas}{" "}
+                {sim.n_lojas === 1 ? "loja" : "lojas"}
+              </span>
+              <span className="inline-flex items-center gap-1 font-semibold text-mudacao-700">
+                <TrendingUp className="h-3 w-3" /> +{delta}
+              </span>
+            </div>
           </div>
-        </div>
 
-        <ArrowRight className="h-5 w-5 flex-shrink-0 text-slate-400" />
+          <ArrowRight className="h-5 w-5 flex-shrink-0 text-slate-400" />
+        </div>
+      </Link>
+
+      <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-2.5">
+        {error && (
+          <span className="text-xs text-red-600" title={error}>
+            Falhou
+          </span>
+        )}
+        <button
+          onClick={handleExportExcel}
+          disabled={downloading}
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-mudacao-300 hover:bg-mudacao-50 hover:text-mudacao-900 disabled:opacity-50"
+        >
+          {downloading ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Gerando…
+            </>
+          ) : (
+            <>
+              <Download className="h-3.5 w-3.5" /> Exportar Excel
+            </>
+          )}
+        </button>
       </div>
-    </Link>
+    </div>
   );
 }

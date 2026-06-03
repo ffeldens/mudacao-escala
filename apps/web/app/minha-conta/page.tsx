@@ -156,6 +156,23 @@ export default async function MinhaContaPage({
                   )}
                 </div>
               </li>
+              <li className="flex items-start gap-2">
+                <span className="font-semibold text-mudacao-700">▸</span>
+                <div>
+                  <Link
+                    href="/minha-conta/avaliar-rede"
+                    className="font-semibold text-mudacao-700 hover:underline"
+                  >
+                    Avaliar rede (upload CSV)
+                  </Link>{" "}
+                  — suba um CSV com várias lojas, receba Excel consolidado{" "}
+                  {profile?.plan_tier === "free" && (
+                    <span className="text-xs text-slate-500">
+                      (recurso Starter)
+                    </span>
+                  )}
+                </div>
+              </li>
               {profile?.plan_tier === "free" && (
                 <li className="flex items-start gap-2">
                   <span className="font-semibold text-mudacao-700">▸</span>

@@ -189,6 +189,11 @@ export function SimulatorForm() {
         "mudacao_simulacao_resultado",
         JSON.stringify(result),
       );
+      // Salva o request também pra habilitar export Excel pós-simulação
+      sessionStorage.setItem(
+        "mudacao_simulacao_request",
+        JSON.stringify(payload.sim_req),
+      );
 
       sendGAEvent("event", "logged_simulation", {
         value: 1,
