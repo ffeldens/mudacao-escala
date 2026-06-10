@@ -56,13 +56,42 @@ def _get_jwks_client() -> PyJWKClient:
     return _jwks_client
 
 
+def _expected_issuer() -> str | None:
+    """Issuer esperado do Supabase: <SUPABASE_URL>/auth/v1.
+
+    Retorna None se SUPABASE_URL não estiver setado (dev) — nesse caso
+    a validação de issuer é pulada, mas exp/sub/aud continuam exigidos.
+    """
+    url = get_settings().SUPABASE_URL
+    if not url:
+        return None
+    return f"{url.rstrip('/')}/auth/v1"
+
+
+def _decode_options() -> tuple[dict, str | None]:
+    """Monta (options, issuer) pro jwt.decode.
+
+    Exige sempre exp/sub/aud; exige iss também quando o issuer é conhecido.
+    """
+    iss = _expected_issuer()
+    require = ["exp", "sub", "aud"]
+    if iss:
+        require.append("iss")
+    return {"require": require}, iss
+
+
 def _decode_token(token: str) -> dict:
     """Decodifica + valida o JWT do Supabase.
 
     Tenta HS256 com SUPABASE_JWT_SECRET primeiro (legado).
     Se algoritmo não bater ou secret faltar, tenta JWKS (RS256/ES256).
+
+    Valida sempre: assinatura, audience="authenticated", expiração,
+    presença de exp/sub/aud, e issuer (quando SUPABASE_URL conhecido) —
+    impede que token de outro projeto Supabase com mesma aud passe.
     """
     settings = get_settings()
+    options, issuer = _decode_options()
 
     # ====== Tentativa 1: HS256 com secret simétrico ======
     if settings.SUPABASE_JWT_SECRET:
@@ -72,6 +101,8 @@ def _decode_token(token: str) -> dict:
                 settings.SUPABASE_JWT_SECRET,
                 algorithms=["HS256"],
                 audience="authenticated",
+                issuer=issuer,
+                options=options,
             )
         except jwt.InvalidAlgorithmError:
             logger.debug("HS256 não é o alg do token — tentando JWKS")
@@ -87,6 +118,11 @@ def _decode_token(token: str) -> dict:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Audience inválida no token",
             ) from e
+        except jwt.InvalidIssuerError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Issuer inválido no token",
+            ) from e
         except jwt.InvalidTokenError as e:
             # Outros erros HS256 — pode ser que o token seja RS256
             logger.debug("HS256 falhou (%s) — tentando JWKS", e)
@@ -100,6 +136,8 @@ def _decode_token(token: str) -> dict:
             signing_key,
             algorithms=["RS256", "ES256"],
             audience="authenticated",
+            issuer=issuer,
+            options=options,
         )
     except jwt.ExpiredSignatureError as e:
         raise HTTPException(

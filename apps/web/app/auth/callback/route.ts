@@ -31,10 +31,24 @@ function getPublicOrigin(request: NextRequest): string {
   return new URL(request.url).origin;
 }
 
+/**
+ * Garante que o destino do redirect é um path relativo interno seguro.
+ * Bloqueia open redirect via `next=//evil.com`, `next=/\evil.com`,
+ * `next=https://evil.com` ou path-traversal de protocolo.
+ */
+function safeNext(value: string | null): string {
+  const fallback = "/minha-conta";
+  if (!value) return fallback;
+  // Precisa começar com "/" simples — rejeita "//", "/\", e URLs absolutas
+  if (!value.startsWith("/")) return fallback;
+  if (value.startsWith("//") || value.startsWith("/\\")) return fallback;
+  return value;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") || "/minha-conta";
+  const next = safeNext(searchParams.get("next"));
 
   const origin = getPublicOrigin(request);
 

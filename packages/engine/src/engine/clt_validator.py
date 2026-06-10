@@ -409,9 +409,19 @@ def _check_brand_comissionado_sabado(
 # Helpers
 # =============================================================================
 def _duracao_horas(inicio: str, fim: str) -> float:
+    """Duração em horas entre dois horários HH:MM.
+
+    Trata turnos que cruzam a meia-noite: se o fim for menor ou igual ao
+    início (ex: 22:00 → 02:00), assume que o fim é no dia seguinte e soma
+    24h. Sem isso, turnos noturnos retornavam duração negativa e os checks
+    de jornada (Art. 58/71) passavam com falso "OK".
+    """
     h1, m1 = map(int, inicio.split(":"))
     h2, m2 = map(int, fim.split(":"))
-    return (h2 - h1) + (m2 - m1) / 60
+    dur = (h2 - h1) + (m2 - m1) / 60
+    if dur <= 0:
+        dur += 24
+    return dur
 
 
 def _load_rules(version: str, rules_path: Path) -> dict:

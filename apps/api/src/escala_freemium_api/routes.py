@@ -6,23 +6,25 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Header, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import Response
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from escala_freemium_api import __version__
 from escala_freemium_api.auth_dep import AuthenticatedUser, CurrentUser, OptionalUser
-from escala_freemium_api.config import get_settings
-from escala_freemium_api.db import Lead, Simulation, UserProfile, get_db
-from escala_freemium_api.email_sender import (
-    send_admin_notification,
-    send_lead_welcome_email,
-    send_starter_welcome_email,
-    send_waitlist_admin_notification,
-)
-from escala_freemium_api.clt_extras import evaluate_extra_risks, merge_risks
+from escala_freemium_api.clt_extras import compute_clt_risks
 from escala_freemium_api.clt_validator_pdf import render_clt_validator_pdf
+from escala_freemium_api.config import get_settings
 from escala_freemium_api.csv_batch import (
     BATCH_CSV_TEMPLATE,
     BatchCsvError,
@@ -30,8 +32,22 @@ from escala_freemium_api.csv_batch import (
     parse_batch_csv,
     run_batch,
 )
+from escala_freemium_api.db import (
+    Lead,
+    Simulation,
+    StripeWebhookEvent,
+    UserProfile,
+    get_db,
+)
+from escala_freemium_api.email_sender import (
+    send_admin_notification,
+    send_lead_welcome_email,
+    send_starter_welcome_email,
+    send_waitlist_admin_notification,
+)
 from escala_freemium_api.excel_export import build_batch_xlsx, build_single_xlsx
 from escala_freemium_api.pdf import render_simulation_pdf
+from escala_freemium_api.rate_limit import limiter
 from escala_freemium_api.schemas import (
     CheckoutSessionRequest,
     CheckoutSessionResponse,
@@ -93,7 +109,9 @@ async def version() -> VersionResponse:
 
 
 @router.post("/simulate", response_model=SimulateResponse, tags=["simulator"])
+@limiter.limit("20/minute")
 async def simulate(
+    request: Request,
     req: SimulateRequest,
     db: DbSession,
     user: OptionalUser = None,
@@ -164,7 +182,9 @@ def _build_custom_financial(profile: UserProfile):
 
 
 @router.post("/lead", response_model=LeadResponse, tags=["leads"])
+@limiter.limit("10/minute")
 async def capture_lead(
+    request: Request,
     req: LeadRequest,
     background_tasks: BackgroundTasks,
     db: DbSession,
@@ -305,21 +325,10 @@ async def validate_clt(
         logger.exception("Falha simulação no validador CLT")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    # Riscos do engine (artigos 71/66/67 + flags de negócio)
-    from engine.core import simulate as engine_simulate  # noqa: PLC0415
-    from escala_freemium_api.simulation_adapter import (
-        _build_engine_input,  # noqa: PLC0415
+    # Riscos CLT (engine + extras), pipeline centralizado em clt_extras
+    result._clt_risks = compute_clt_risks(  # type: ignore[attr-defined]
+        req, result, custom_financial=custom_financial
     )
-
-    engine_input = _build_engine_input(req, custom_financial=custom_financial)
-    engine_out = engine_simulate(engine_input)
-    engine_risks = [r.model_dump(mode="json") for r in engine_out.riscos_clt]
-
-    # Riscos extras (viabilidade matemática, DSR mínimo, jornada noturna)
-    extra_risks = evaluate_extra_risks(req, result)
-
-    # Mescla e ordena por severidade (bad → good)
-    result._clt_risks = merge_risks(engine_risks, extra_risks)  # type: ignore[attr-defined]
 
     pdf_bytes = render_clt_validator_pdf(
         req=req,
@@ -412,19 +421,11 @@ async def export_excel(
         logger.exception("Falha simulação export-excel")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    # Riscos CLT (mesma lógica do validate-clt — reaproveita engine + extras)
+    # Riscos CLT (mesma lógica do validate-clt — pipeline centralizado).
+    # Falha graceful: gera planilha sem aba de riscos se o engine quebrar.
     clt_risks: list[dict] = []
     try:
-        from engine.core import simulate as engine_simulate  # noqa: PLC0415
-        from escala_freemium_api.simulation_adapter import (
-            _build_engine_input,  # noqa: PLC0415
-        )
-
-        engine_input = _build_engine_input(req, custom_financial=custom_financial)
-        engine_out = engine_simulate(engine_input)
-        engine_risks = [r.model_dump(mode="json") for r in engine_out.riscos_clt]
-        extra_risks = evaluate_extra_risks(req, result)
-        clt_risks = merge_risks(engine_risks, extra_risks)
+        clt_risks = compute_clt_risks(req, result, custom_financial=custom_financial)
     except Exception:
         logger.exception("Falha CLT no export-excel — gerando sem aba de riscos")
 
@@ -485,17 +486,8 @@ async def export_excel_from_history(
     # Re-avalia riscos CLT (sempre fresh — régua pode ter sido atualizada)
     clt_risks: list[dict] = []
     try:
-        from engine.core import simulate as engine_simulate  # noqa: PLC0415
-        from escala_freemium_api.simulation_adapter import (
-            _build_engine_input,  # noqa: PLC0415
-        )
-
         custom_financial = _build_custom_financial(profile)
-        engine_input = _build_engine_input(req, custom_financial=custom_financial)
-        engine_out = engine_simulate(engine_input)
-        engine_risks = [r.model_dump(mode="json") for r in engine_out.riscos_clt]
-        extra_risks = evaluate_extra_risks(req, result)
-        clt_risks = merge_risks(engine_risks, extra_risks)
+        clt_risks = compute_clt_risks(req, result, custom_financial=custom_financial)
     except Exception:
         logger.exception("Falha CLT no export-excel histórico")
 
@@ -614,7 +606,9 @@ async def batch_csv_upload(
 
 
 @router.post("/waitlist", response_model=WaitlistResponse, tags=["leads"])
+@limiter.limit("10/minute")
 async def waitlist_signup(
+    request: Request,
     req: WaitlistRequest,
     background_tasks: BackgroundTasks,
     db: DbSession,
@@ -693,7 +687,9 @@ async def _send_waitlist_notification_safe(
 
 
 @router.post("/lead-and-simulate", response_model=SimulateResponse, tags=["simulator"])
+@limiter.limit("10/minute")
 async def lead_and_simulate(
+    request: Request,
     lead_req: LeadRequest,
     sim_req: SimulateRequest,
     background_tasks: BackgroundTasks,
@@ -892,6 +888,13 @@ async def stripe_webhook(
             detail="Missing stripe-signature header",
         )
 
+    # Endpoint público: rejeita body absurdo ANTES de bufferizar em memória.
+    # Payloads Stripe legítimos são < 100 KB. Defesa adicional deve existir
+    # no Caddy (request body limit) — esse check é a última linha.
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > 256_000:
+        raise HTTPException(status_code=413, detail="Payload too large")
+
     payload = await request.body()
 
     try:
@@ -904,9 +907,25 @@ async def stripe_webhook(
         ) from e
 
     event_type = event["type"]
+    event_id = event["id"]
     obj = event["data"]["object"]
 
-    logger.info("Stripe webhook recebido: %s (id=%s)", event_type, event["id"])
+    logger.info("Stripe webhook recebido: %s (id=%s)", event_type, event_id)
+
+    # Idempotência: o Stripe reentrega eventos (retries). Se já processamos
+    # este event_id, retorna OK sem reprocessar — evita welcome email duplicado
+    # e re-sync redundante. INSERT serve de lock atômico via PK.
+    if db.get(StripeWebhookEvent, event_id):
+        logger.info("Evento Stripe já processado (id=%s) — ignorando replay", event_id)
+        return {"received": True, "event_type": event_type, "duplicate": True}
+    db.add(StripeWebhookEvent(event_id=event_id, event_type=event_type))
+    try:
+        db.commit()
+    except Exception:
+        # Corrida: outro worker inseriu o mesmo event_id entre o get e o commit.
+        db.rollback()
+        logger.info("Evento Stripe em corrida (id=%s) — ignorando replay", event_id)
+        return {"received": True, "event_type": event_type, "duplicate": True}
 
     if event_type == "checkout.session.completed":
         # Sessão concluída — a subscription já foi criada pelo Stripe

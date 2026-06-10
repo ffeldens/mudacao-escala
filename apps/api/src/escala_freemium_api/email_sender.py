@@ -7,6 +7,7 @@ Doc: https://resend.com/docs/api-reference/emails/send-email
 from __future__ import annotations
 
 import base64
+import html
 import logging
 from decimal import Decimal
 
@@ -37,11 +38,13 @@ async def send_admin_notification(
     if not settings.RESEND_API_KEY or not settings.ADMIN_NOTIFY_EMAIL:
         return False
 
-    nome = lead_nome or "(sem nome)"
-    empresa = lead_empresa or "(sem empresa)"
-    whatsapp = lead_whatsapp or "(sem WhatsApp)"
+    # Escapa campos livres do lead — evita HTML/phishing injection no email
+    # que o admin recebe (nome/empresa são strings arbitrárias do formulário).
+    nome = html.escape(lead_nome or "(sem nome)")
+    empresa = html.escape(lead_empresa or "(sem empresa)")
+    whatsapp = html.escape(lead_whatsapp or "(sem WhatsApp)")
 
-    html = f"""\
+    html_body = f"""\
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><title>Novo lead</title></head>
@@ -105,7 +108,7 @@ async def send_admin_notification(
         "to": [settings.ADMIN_NOTIFY_EMAIL],
         "reply_to": lead_email,  # responder direto pro lead
         "subject": f"🎯 Lead: {nome} ({result.n_lojas} lojas, {_brl(result.delta_folha_rede_mes)}/mês)",
-        "html": html,
+        "html": html_body,
         "tags": [
             {"name": "category", "value": "admin_notification"},
             {"name": "env", "value": settings.APP_ENV},
@@ -156,14 +159,14 @@ async def send_starter_welcome_email(
         logger.warning("RESEND_API_KEY vazia — pulando welcome Starter")
         return False
 
-    nome_saudacao = nome.split()[0] if nome else "Olá"
+    nome_saudacao = html.escape(nome.split()[0]) if nome else "Olá"
     trial_msg = (
         f"Seu trial gratuito vai até <strong>{trial_end_at}</strong>. "
         if trial_end_at
         else "Seu trial gratuito de 14 dias começou. "
     )
 
-    html = f"""\
+    html_body = f"""\
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -311,7 +314,7 @@ async def send_starter_welcome_email(
         "to": [to],
         "reply_to": settings.RESEND_REPLY_TO,
         "subject": f"🎉 {nome_saudacao}, bem-vindo ao Starter (trial 14 dias)",
-        "html": html,
+        "html": html_body,
         "tags": [
             {"name": "category", "value": "starter_welcome"},
             {"name": "env", "value": settings.APP_ENV},
@@ -359,10 +362,11 @@ async def send_waitlist_admin_notification(
         "enterprise": "Enterprise (sob consulta)",
     }
     plano_label = PLANOS_PT.get(plano, plano)
-    empresa_label = empresa or "(sem empresa)"
+    nome = html.escape(nome)
+    empresa_label = html.escape(empresa or "(sem empresa)")
     n_lojas_label = str(n_lojas) if n_lojas else "(não informado)"
 
-    html = f"""\
+    html_body = f"""\
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><title>Novo interesse em plano pago</title></head>
@@ -411,7 +415,7 @@ async def send_waitlist_admin_notification(
         "to": [settings.ADMIN_NOTIFY_EMAIL],
         "reply_to": email,
         "subject": f"🚀 Waitlist: {nome} interessado em {plano_label}",
-        "html": html,
+        "html": html_body,
         "tags": [
             {"name": "category", "value": "waitlist_signup"},
             {"name": "plano", "value": plano},
@@ -458,15 +462,15 @@ async def send_lead_welcome_email(
         logger.warning("RESEND_API_KEY vazia — pulando envio de email (dev?)")
         return False
 
-    nome_saudacao = nome.split()[0] if nome else "olá"
-    html = _render_welcome_html(nome=nome_saudacao, r=result)
+    nome_saudacao = html.escape(nome.split()[0]) if nome else "olá"
+    html_body = _render_welcome_html(nome=nome_saudacao, r=result)
 
     payload: dict = {
         "from": f"MudAção Escala <{settings.RESEND_FROM_EMAIL}>",
         "to": [to],
         "reply_to": settings.RESEND_REPLY_TO,
         "subject": f"{nome_saudacao.capitalize()}, sua simulação PEC 8/2025 está pronta",
-        "html": html,
+        "html": html_body,
         "tags": [
             {"name": "category", "value": "lead_welcome"},
             {"name": "env", "value": settings.APP_ENV},

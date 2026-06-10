@@ -24,6 +24,7 @@ dependencies = [
     "jinja2>=3.1",            # template do PDF
     "openpyxl>=3.1",          # Export .xlsx multi-aba (Sprint 3 #4)
     "python-multipart>=0.0.9", # Upload CSV multi-loja (Sprint 3 #4)
+    "slowapi>=0.1.9",         # Rate limiting nos endpoints anônimos
     "stripe>=8.0,<11",        # Stripe SDK
     "PyJWT[crypto]>=2.8,<3",  # valida JWT do Supabase (HS256 + ES256/RS256 via JWKS)
     # Engine local (resolvido via uv workspace)

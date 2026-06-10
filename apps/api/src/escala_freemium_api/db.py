@@ -182,6 +182,21 @@ class Simulation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class StripeWebhookEvent(Base):
+    """Registro de eventos Stripe já processados (idempotência).
+
+    O Stripe reentrega eventos por design (retries em timeout/5xx) e o mesmo
+    event_id pode chegar várias vezes. Persistir o event_id e checar antes de
+    processar evita side-effects duplicados (ex: welcome email repetido).
+    """
+
+    __tablename__ = "stripe_webhook_events"
+
+    event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    processed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 # =============================================================================
 # Lifecycle
 # =============================================================================

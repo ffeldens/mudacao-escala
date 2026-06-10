@@ -67,6 +67,16 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.APP_ENV == "production"
 
+    @property
+    def is_development(self) -> bool:
+        """True só quando APP_ENV é explicitamente dev/local.
+
+        Usado como gate fail-safe pra vazamento de traceback: qualquer
+        valor inesperado de APP_ENV (incluindo o default) NÃO é dev, então
+        nunca vaza stack trace por engano de config.
+        """
+        return self.APP_ENV in ("development", "local", "dev")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

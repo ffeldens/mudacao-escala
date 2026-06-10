@@ -15,10 +15,16 @@ export default async function LoginPage({
 }: {
   searchParams: { redirect?: string; reason?: string };
 }) {
-  // Se já estiver logado, vai direto pra minha conta
+  // Se já estiver logado, vai direto pra minha conta.
+  // Valida o redirect pra evitar open redirect (//evil.com, URL absoluta).
   const user = await getCurrentUser();
   if (user) {
-    redirect(searchParams.redirect || "/minha-conta");
+    const dest = searchParams.redirect;
+    const safe =
+      dest && dest.startsWith("/") && !dest.startsWith("//") && !dest.startsWith("/\\")
+        ? dest
+        : "/minha-conta";
+    redirect(safe);
   }
 
   return (

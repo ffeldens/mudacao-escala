@@ -275,3 +275,32 @@ def merge_risks(
         all_risks,
         key=lambda r: severity_order.get(r.get("severidade", "info"), 99),
     )
+
+
+def compute_clt_risks(
+    req: SimulateRequest,
+    result: SimulateResponse,
+    custom_financial: Any | None = None,
+) -> list[dict[str, Any]]:
+    """Pipeline completo de riscos CLT (engine + extras), mesclado e ordenado.
+
+    Centraliza a lógica que estava duplicada em /validate-clt, /export-excel
+    e /export-excel-from-history: roda o engine pra pegar os riscos por artigo
+    (71/66/67 + flags), soma os riscos extras (viabilidade, DSR, slots
+    descobertos, noturno) e mescla por severidade.
+
+    Imports do engine são lazy pra evitar import circular com simulation_adapter.
+    """
+    from engine.core import simulate as engine_simulate  # noqa: PLC0415
+
+    from escala_freemium_api.simulation_adapter import (  # noqa: PLC0415
+        _build_engine_input,
+    )
+
+    engine_input = _build_engine_input(req, custom_financial=custom_financial)
+    engine_out = engine_simulate(engine_input)
+    engine_risks = [r.model_dump(mode="json") for r in engine_out.riscos_clt]
+
+    extra_risks = evaluate_extra_risks(req, result)
+
+    return merge_risks(engine_risks, extra_risks)
